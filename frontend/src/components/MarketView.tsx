@@ -62,13 +62,19 @@ export default function MarketView() {
         if (res.ok) {
           const data = await res.json();
           if (data.price) {
-            setStats(prev => prev ? {
-              ...prev,
-              price: data.price,
-              change_24h_pct: data.change_24h,
-              change_24h_usd: data.price * (data.change_24h / 100),
-              volume_24h: data.volume_24h || prev.volume_24h,
-            } : prev);
+            setStats(prev => {
+              if (!prev) return prev;
+              // Compute actual USD change from percentage
+              const basePrice = prev.price / (1 + prev.change_24h_pct / 100);
+              const newUsdChange = data.price - basePrice;
+              return {
+                ...prev,
+                price: data.price,
+                change_24h_pct: data.change_24h,
+                change_24h_usd: newUsdChange,
+                volume_24h: data.volume_24h || prev.volume_24h,
+              };
+            });
           }
         }
       } catch { /* silent */ }
