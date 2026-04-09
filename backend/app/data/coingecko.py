@@ -85,4 +85,31 @@ def _add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["returns"] = df["price"].pct_change()
     df["volatility_20d"] = df["returns"].rolling(window=20).std()
 
+    # ── New features for improved GBM ──
+
+    # Lagged returns
+    for lag in [1, 3, 7, 14, 30]:
+        df[f"return_{lag}d"] = df["price"].pct_change(lag)
+
+    # Relative volume: current vs 20-day average
+    vol_avg_20 = df["volume"].rolling(window=20).mean()
+    df["relative_volume"] = df["volume"] / vol_avg_20.replace(0, np.nan)
+
+    # Volatility ratio: 5d vol / 20d vol (expanding vs contracting)
+    df["volatility_5d"] = df["returns"].rolling(window=5).std()
+    df["volatility_ratio"] = df["volatility_5d"] / df["volatility_20d"].replace(0, np.nan)
+
+    # RSI momentum: how RSI is changing
+    df["rsi_momentum"] = df["rsi"].diff(5)
+
+    # Price position: where price sits in 20-day range (0=low, 1=high)
+    high_20d = df["price"].rolling(window=20).max()
+    low_20d = df["price"].rolling(window=20).min()
+    price_range = (high_20d - low_20d).replace(0, np.nan)
+    df["price_position"] = (df["price"] - low_20d) / price_range
+
+    # Bollinger position: normalized within bands (0=lower, 1=upper)
+    bb_range = (df["bb_upper"] - df["bb_lower"]).replace(0, np.nan)
+    df["bollinger_position"] = (df["price"] - df["bb_lower"]) / bb_range
+
     return df.dropna().reset_index(drop=True)
