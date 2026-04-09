@@ -1,0 +1,61 @@
+TRUE MARKETS PREDICTION ENGINE — CHEATSHEET
+=============================================
+
+QUICK START (2 minutes)
+-----------------------
+Open two terminal windows:
+
+Terminal 1 — Backend:
+  cd ~/Desktop/claude/truemarkets-predictions/backend
+  source venv/bin/activate
+  uvicorn app.main:app --reload
+
+Terminal 2 — Frontend:
+  cd ~/Desktop/claude/truemarkets-predictions/frontend
+  npm run dev
+
+Then open: http://localhost:3000
+
+
+ON A DIFFERENT MACHINE
+----------------------
+  git clone https://github.com/saieshagupta-cpu/truemarkets-predictions.git
+  cd truemarkets-predictions
+
+  # Backend
+  cd backend
+  python3 -m venv venv && source venv/bin/activate
+  pip install -r requirements.txt
+  uvicorn app.main:app --reload
+
+  # Frontend (new terminal)
+  cd frontend
+  npm install
+  npm run dev
+
+
+DEPLOY LIVE (no terminals needed)
+---------------------------------
+Frontend → Vercel (free)
+  1. vercel.com → Import GitHub repo
+  2. Root directory: frontend
+  3. Add env var: NEXT_PUBLIC_API_URL = https://your-backend-url.up.railway.app/api
+
+Backend → Railway (free)
+  1. railway.app → Deploy from GitHub
+  2. Root directory: backend
+  3. Uses Dockerfile automatically
+  4. Add env var: FRONTEND_URL = https://your-app.vercel.app
+
+
+URLS WHEN RUNNING LOCALLY
+--------------------------
+Frontend:    http://localhost:3000
+Backend:     http://localhost:8000
+API docs:    http://localhost:8000/docs
+Health:      http://localhost:8000/api/health
+
+
+GITHUB REPO
+------------
+https://github.com/saieshagupta-cpu/truemarkets-predictions
