@@ -59,8 +59,8 @@ SUPPORTED_COINS = {
 }
 
 MODEL_WEIGHTS_DIR = os.path.join(os.path.dirname(__file__), "..", "app", "models", "saved")
-LSTM_WEIGHT = 0.40
-XGBOOST_WEIGHT = 0.45
+LSTM_WEIGHT = 0.55
+XGBOOST_WEIGHT = 0.30
 SENTIMENT_WEIGHT = 0.15
 
 DATA_REFRESH_HOURS = 6
