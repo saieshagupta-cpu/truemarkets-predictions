@@ -395,9 +395,42 @@ async def get_mispricing(coin: str = "bitcoin"):
     # Sort: strongest mispricings first
     signals.sort(key=lambda s: abs(s["diff"]) if s["diff"] is not None else 0, reverse=True)
 
+    # ── Enhance Fear & Greed with order flow ──
+    # Alternative.me updates once daily. Order flow gives us real-time fear/greed.
+    # Blend: 60% Alternative.me base + 40% order flow adjustment
+    base_fg = prediction["indicators"]["fear_greed"]
+    of_signal = order_flow.get("combined_signal", 0)  # -1 (fear/sell) to +1 (greed/buy)
+    of_fg_adjustment = of_signal * 50  # maps to -50 to +50 on FG scale
+    enhanced_fg = max(0, min(100, base_fg * 0.6 + (50 + of_fg_adjustment) * 0.4))
+    enhanced_fg = round(enhanced_fg)
+
+    if enhanced_fg <= 20:
+        fg_class = "Extreme Fear"
+    elif enhanced_fg <= 40:
+        fg_class = "Fear"
+    elif enhanced_fg <= 60:
+        fg_class = "Neutral"
+    elif enhanced_fg <= 80:
+        fg_class = "Greed"
+    else:
+        fg_class = "Extreme Greed"
+
+    enhanced_indicators = {
+        **prediction["indicators"],
+        "fear_greed": enhanced_fg,
+        "fear_greed_base": base_fg,
+        "fear_greed_classification": fg_class,
+    }
+    enhanced_sentiment = {
+        **prediction["sentiment_signal"],
+        "fear_greed_value": enhanced_fg,
+        "fear_greed": fg_class,
+    }
+
     # ── Generate single recommended trade ──
+    prediction_with_enhanced = {**prediction, "indicators": enhanced_indicators, "sentiment_signal": enhanced_sentiment}
     recommended = await _build_recommendation(
-        signals, prediction, cfg, polymarket_markets, order_flow
+        signals, prediction_with_enhanced, cfg, polymarket_markets, order_flow
     )
 
     result = {
@@ -405,8 +438,8 @@ async def get_mispricing(coin: str = "bitcoin"):
         "symbol": cfg["symbol"],
         "current_price": prediction["current_price"],
         "confidence": prediction["confidence"],
-        "sentiment_signal": prediction["sentiment_signal"],
-        "indicators": prediction["indicators"],
+        "sentiment_signal": enhanced_sentiment,
+        "indicators": enhanced_indicators,
         "signals": signals,
         "polymarket_count": len(polymarket_markets),
         "order_flow": order_flow,
