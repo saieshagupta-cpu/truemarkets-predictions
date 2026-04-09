@@ -18,10 +18,11 @@ export default function Header({ activeTab, onTabChange, lastUpdated, nextRefres
         <div className="flex items-center justify-between h-14">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-md bg-tm-accent flex items-center justify-center">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                  <polyline points="22,7 13.5,15.5 8.5,10.5 2,17" />
-                  <polyline points="16,7 22,7 22,13" />
+              <div className="w-7 h-7 rounded-lg bg-black flex items-center justify-center border border-white/10">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <rect x="2" y="3" width="5" height="5" rx="0.5" fill="white" />
+                  <rect x="9" y="3" width="13" height="5" rx="0.5" fill="white" />
+                  <rect x="14" y="3" width="5" height="19" rx="0.5" fill="white" />
                 </svg>
               </div>
               <span className="font-bold text-sm">True Markets</span>
