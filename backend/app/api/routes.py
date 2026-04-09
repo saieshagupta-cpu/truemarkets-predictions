@@ -16,13 +16,14 @@ from app.config import SUPPORTED_COINS
 router = APIRouter()
 
 _cache: dict = {}
-CACHE_TTL = 300
+CACHE_TTL = 30  # 30 seconds for most endpoints
+CACHE_TTL_SLOW = 120  # 2 min for heavy endpoints (market-stats, chart)
 
 
-def _get_cached(key: str):
+def _get_cached(key: str, ttl: int | None = None):
     if key in _cache:
         data, ts = _cache[key]
-        if time.time() - ts < CACHE_TTL:
+        if time.time() - ts < (ttl or CACHE_TTL):
             return data
     return None
 
@@ -87,6 +88,32 @@ async def get_predictions(coin: str = "bitcoin"):
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
+# ─── Fast Price (lightweight, 10s cache) ─────────────────
+
+@router.get("/price/bitcoin")
+async def get_fast_price():
+    """Lightweight price endpoint for frequent polling."""
+    cached = _get_cached("price:bitcoin", ttl=10)
+    if cached:
+        return cached
+
+    try:
+        data = await fetch_current_price("bitcoin")
+        result = {
+            "price": data["price"],
+            "change_24h": data["change_24h"],
+            "volume_24h": data["volume_24h"],
+            "timestamp": time.time(),
+        }
+        _set_cached("price:bitcoin", result)
+        return result
+    except Exception:
+        # Return stale cache if available
+        if "price:bitcoin" in _cache:
+            return _cache["price:bitcoin"][0]
+        return {"price": 0, "change_24h": 0, "volume_24h": 0, "timestamp": 0}
+
+
 # ─── Market Data ─────────────────────────────────────────
 
 @router.get("/market-data/{coin}")
@@ -135,7 +162,7 @@ async def get_market_data(coin: str = "bitcoin"):
 @router.get("/market-stats/bitcoin")
 async def get_market_stats():
     """Detailed BTC market stats matching the TrueMarkets mobile app."""
-    cached = _get_cached("market-stats:bitcoin")
+    cached = _get_cached("market-stats:bitcoin", ttl=CACHE_TTL_SLOW)
     if cached:
         return cached
 

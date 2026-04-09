@@ -11,7 +11,7 @@ import SignalBreakdown from "@/components/SignalBreakdown";
 import type { MispricingData } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
-const REFRESH_INTERVAL = 5 * 60 * 1000;
+const PREDICTION_INTERVAL = 30 * 1000;  // 30 seconds
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"market" | "prediction">("market");
@@ -19,7 +19,7 @@ export default function Home() {
   const [predLoading, setPredLoading] = useState(false);
   const [predError, setPredError] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [nextRefresh, setNextRefresh] = useState(REFRESH_INTERVAL / 1000);
+  const [nextRefresh, setNextRefresh] = useState(PREDICTION_INTERVAL / 1000);
   const [portfolioKey, setPortfolioKey] = useState(0);
 
   const fetchPredictions = useCallback(async (isRefresh = false) => {
@@ -40,20 +40,23 @@ export default function Home() {
       if (!isRefresh) setPredError(true);
     } finally {
       setPredLoading(false);
-      setNextRefresh(REFRESH_INTERVAL / 1000);
+      setNextRefresh(PREDICTION_INTERVAL / 1000);
     }
   }, []);
 
+  // Fetch on tab switch
   useEffect(() => {
     if (activeTab === "prediction" && !mispricing && !predLoading) fetchPredictions();
   }, [activeTab, mispricing, predLoading, fetchPredictions]);
 
+  // Auto-refresh predictions every 30s
   useEffect(() => {
     if (activeTab !== "prediction") return;
-    const i = setInterval(() => fetchPredictions(true), REFRESH_INTERVAL);
+    const i = setInterval(() => fetchPredictions(true), PREDICTION_INTERVAL);
     return () => clearInterval(i);
   }, [activeTab, fetchPredictions]);
 
+  // Countdown timer
   useEffect(() => {
     const t = setInterval(() => setNextRefresh((p) => Math.max(0, p - 1)), 1000);
     return () => clearInterval(t);
@@ -132,22 +135,16 @@ function PredictionView({
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Compact hero */}
       <CoinHero mispricing={mispricing} market={null} />
 
-      {/* Two-column: Signals left, Sidebar right */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left column: Recommended + Signals */}
         <div className="lg:col-span-8 space-y-4">
-          {/* Recommended trade — compact */}
           {mispricing.recommended_trade && (
             <RecommendedTrade
               trade={mispricing.recommended_trade}
               onOrderPlaced={onOrderPlaced}
             />
           )}
-
-          {/* Mispricing signals */}
           <MispricingSignals
             signals={mispricing.signals}
             currentPrice={mispricing.current_price}
@@ -156,7 +153,6 @@ function PredictionView({
           />
         </div>
 
-        {/* Right column: Signal breakdown + Portfolio */}
         <div className="lg:col-span-4 space-y-4">
           <SignalBreakdown
             sentiment={mispricing.sentiment_signal}
@@ -166,7 +162,6 @@ function PredictionView({
           />
           <PortfolioImpact refreshKey={portfolioKey} />
 
-          {/* Methodology */}
           <details className="bg-tm-card border border-tm-border rounded-xl">
             <summary className="px-4 py-2.5 cursor-pointer text-xs text-tm-muted hover:text-tm-text">
               How it works
@@ -177,9 +172,7 @@ function PredictionView({
                 <span className="text-tm-yellow"> XGBoost (45%)</span>,
                 <span className="text-tm-purple"> Sentiment (15%)</span>.
                 Compares our 30-day probability forecasts against Polymarket crowd odds to find mispricings.
-              </p>
-              <p>
-                Recommended trade is the strongest signal, priced live via True Markets Gateway API.
+                Order flow from Polymarket microstructure + True Markets orders feeds into the recommendation.
               </p>
             </div>
           </details>
