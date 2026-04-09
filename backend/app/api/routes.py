@@ -556,23 +556,25 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
     if of_signal != 0:
         score += of_signal * 2  # ±2 range, same tier as FG
 
-    # Model probability context (lead with this — it's the primary signal)
+    # Preliminary side decision
+    side = "buy" if score >= 0 else "sell"
+
+    # Model probability context — only if it agrees with the side
     if nearest_up and nearest_down:
         up_t = int(float(nearest_up["threshold"]))
         down_t = int(float(nearest_down["threshold"]))
         up_pct = int(best_up_prob * 100)
         down_pct = int(best_down_prob * 100)
-        if best_up_prob > best_down_prob:
+        if side == "buy" and best_up_prob > best_down_prob:
             ratio = best_up_prob / max(best_down_prob, 0.01)
             reasons.insert(0, f"Our model predicts upward movement is {ratio:.1f}x more likely — {up_pct}% chance of reaching ${up_t:,} vs {down_pct}% chance of dropping to ${down_t:,}")
-        elif best_down_prob > best_up_prob:
+        elif side == "sell" and best_down_prob > best_up_prob:
             ratio = best_down_prob / max(best_up_prob, 0.01)
             reasons.insert(0, f"Our model predicts downward movement is {ratio:.1f}x more likely — {down_pct}% chance of dropping to ${down_t:,} vs {up_pct}% chance of reaching ${up_t:,}")
+        elif side == "buy":
+            reasons.insert(0, f"Our model sees {up_pct}% upside to ${up_t:,} — supported by other signals")
         else:
-            reasons.insert(0, f"Our model sees equal probability — {up_pct}% up to ${up_t:,}, {down_pct}% down to ${down_t:,}")
-
-    # Preliminary side decision (model + FG so far, RSI/sentiment added below)
-    side = "buy" if score >= 0 else "sell"
+            reasons.insert(0, f"Our model sees {down_pct}% downside to ${down_t:,} — supported by other signals")
 
     # Polymarket analysis — only include bullets that support the recommendation
     if has_poly:

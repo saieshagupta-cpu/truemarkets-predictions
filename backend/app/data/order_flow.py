@@ -26,19 +26,20 @@ async def fetch_order_flow(coin: str = "bitcoin", polymarket_markets: list | Non
     poly_signal = poly_flow["signal"]  # -1 (sell pressure) to +1 (buy pressure)
     tm_signal = tm_flow["signal"]
 
-    # Weight: Polymarket has richer data, TM has actual order intent
-    if tm_flow["order_count"] > 0:
-        combined = poly_signal * 0.6 + tm_signal * 0.4
+    # Weight: Polymarket has real data. TM mock returns fake orders — only
+    # use TM if there are enough real orders to be meaningful (>5).
+    if tm_flow["order_count"] > 5:
+        combined = poly_signal * 0.7 + tm_signal * 0.3
     else:
-        combined = poly_signal  # TM has no data, use poly only
+        combined = poly_signal  # TM mock data is not meaningful
 
-    if combined > 0.3:
+    if combined > 0.25:
         pressure = "strong_buy"
-    elif combined > 0.1:
+    elif combined > 0.08:
         pressure = "buy"
-    elif combined < -0.3:
+    elif combined < -0.25:
         pressure = "strong_sell"
-    elif combined < -0.1:
+    elif combined < -0.08:
         pressure = "sell"
     else:
         pressure = "neutral"
@@ -96,11 +97,13 @@ def _analyze_polymarket_flow(markets: list) -> dict:
     liq_ratio = (up_liq - down_liq) / max(total_liq, 1)
 
     # Combined Polymarket flow signal
+    # Volume ratio is the PRIMARY signal — actual money flowing in
+    # Momentum confirms direction. Liquidity and acceleration are minor context.
     signal = (
-        vol_ratio * 0.35          # where is the money going
-        + momentum_signal * 5 * 0.30  # are prices moving (scaled since changes are small decimals)
-        + liq_ratio * 0.20        # where is liquidity deeper
-        + min(max(vol_accel, -1), 1) * 0.15  # is activity increasing
+        vol_ratio * 0.50                          # where is the money going (dominant)
+        + momentum_signal * 5 * 0.25              # price movement direction
+        + liq_ratio * 0.10                        # liquidity context (minor)
+        + min(max(vol_accel, -1), 1) * 0.15       # activity level
     )
     signal = max(-1, min(1, signal))
 
