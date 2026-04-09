@@ -421,8 +421,28 @@ async def get_mispricing(coin: str = "bitcoin"):
         "fear_greed_base": base_fg,
         "fear_greed_classification": fg_class,
     }
+    # Recompute overall sentiment signal using enhanced FG + order flow
+    reddit_score = prediction["sentiment_signal"].get("sentiment_score", 0)
+    import numpy as _np
+    sent_score = 0.0
+    sent_score += _np.clip(reddit_score * 5, -1, 1) * 0.3   # Reddit
+    sent_score += ((enhanced_fg - 50) / 50) * 0.4            # Enhanced FG (includes order flow)
+    sent_score += of_signal * 0.3                             # Direct order flow
+
+    if sent_score > 0.4:
+        overall_signal = "Strongly Bullish"
+    elif sent_score > 0.15:
+        overall_signal = "Bullish"
+    elif sent_score < -0.4:
+        overall_signal = "Strongly Bearish"
+    elif sent_score < -0.15:
+        overall_signal = "Bearish"
+    else:
+        overall_signal = "Neutral"
+
     enhanced_sentiment = {
         **prediction["sentiment_signal"],
+        "overall_signal": overall_signal,
         "fear_greed_value": enhanced_fg,
         "fear_greed": fg_class,
     }
