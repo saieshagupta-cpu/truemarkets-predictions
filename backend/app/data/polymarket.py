@@ -76,8 +76,17 @@ def _parse_markets(markets: list[dict]) -> list[dict]:
             "prices": prices,
             "yes_price": prices[0] if prices else 0,
             "volume": float(m.get("volume", 0)),
-            "liquidity": float(m.get("liquidity", 0)),
+            "liquidity": float(m.get("liquidity", 0) or 0),
             "end_date": m.get("endDate", ""),
+            # Order flow fields
+            "volume24hr": float(m.get("volume24hr", 0) or 0),
+            "volume1wk": float(m.get("volume1wk", 0) or 0),
+            "volume1mo": float(m.get("volume1mo", 0) or 0),
+            "bestBid": float(m.get("bestBid", 0) or 0),
+            "bestAsk": float(m.get("bestAsk", 0) or 0),
+            "spread": float(m.get("spread", 0) or 0),
+            "oneDayPriceChange": float(m.get("oneDayPriceChange", 0) or 0),
+            "oneWeekPriceChange": float(m.get("oneWeekPriceChange", 0) or 0),
         })
     result.sort(key=lambda x: x["question"])
     return result

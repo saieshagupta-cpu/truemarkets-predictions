@@ -8,6 +8,7 @@ from app.data.coingecko import fetch_current_price, fetch_historical_prices
 from app.data.fear_greed import fetch_fear_greed
 from app.data.onchain import fetch_onchain_metrics
 from app.data.social_sentiment import fetch_social_sentiment
+from app.data.order_flow import fetch_order_flow
 from app.data.polymarket import fetch_polymarket_markets
 from app.data import truemarkets
 from app.config import SUPPORTED_COINS
@@ -269,6 +270,12 @@ async def get_mispricing(coin: str = "bitcoin"):
     prediction = await get_predictions(coin)
     polymarket_markets = await fetch_polymarket_markets(coin, cfg.get("polymarket_keywords"))
 
+    # Fetch order flow from Polymarket microstructure + True Markets orders
+    try:
+        order_flow = await fetch_order_flow(coin, polymarket_markets)
+    except Exception:
+        order_flow = {"combined_signal": 0, "pressure": "neutral", "polymarket_flow": {"signal": 0, "details": {}}, "truemarkets_flow": {"signal": 0, "order_count": 0}}
+
     # Build threshold -> Polymarket prob lookup
     poly_by_threshold: dict[str, dict] = {}
     for m in polymarket_markets:
@@ -345,7 +352,7 @@ async def get_mispricing(coin: str = "bitcoin"):
 
     # ── Generate single recommended trade ──
     recommended = await _build_recommendation(
-        signals, prediction, cfg, polymarket_markets
+        signals, prediction, cfg, polymarket_markets, order_flow
     )
 
     result = {
@@ -357,6 +364,7 @@ async def get_mispricing(coin: str = "bitcoin"):
         "indicators": prediction["indicators"],
         "signals": signals,
         "polymarket_count": len(polymarket_markets),
+        "order_flow": order_flow,
         "recommended_trade": recommended,
     }
 
@@ -364,12 +372,12 @@ async def get_mispricing(coin: str = "bitcoin"):
     return result
 
 
-async def _build_recommendation(signals: list, prediction: dict, cfg: dict, polymarket_markets: list) -> dict:
+async def _build_recommendation(signals: list, prediction: dict, cfg: dict, polymarket_markets: list, order_flow: dict | None = None) -> dict:
     """
     Build a single recommended action by weighing ALL signals together:
     1. Model's directional view (up vs down probabilities)
-    2. Polymarket vs model disagreements (both directions)
-    3. Fear & Greed (contrarian indicator)
+    2. Order flow from Polymarket + True Markets (buy/sell pressure)
+    3. Fear & Greed
     4. RSI + sentiment
     """
     symbol = cfg["symbol"]
@@ -443,6 +451,13 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
     elif fg_signal == "bullish":
         score += 0.75
 
+    # Order flow (from Polymarket microstructure + True Markets orders)
+    of = order_flow or {}
+    of_signal = of.get("combined_signal", 0)
+    of_pressure = of.get("pressure", "neutral")
+    if of_signal != 0:
+        score += of_signal * 2  # ±2 range, same tier as FG
+
     # Model probability context (lead with this — it's the primary signal)
     if nearest_up and nearest_down:
         up_t = int(float(nearest_up["threshold"]))
@@ -483,6 +498,15 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
                 t = int(float(nearest_poly_down["threshold"]))
                 if poly_down_pct >= our_down_pct:
                     reasons.append(f"Polymarket also sees downside — {poly_down_pct}% chance of dropping to ${t:,}")
+
+    # Order flow reason — only if it agrees
+    poly_details = of.get("polymarket_flow", {}).get("details", {})
+    if of_pressure in ("strong_buy", "buy") and side == "buy":
+        vol_detail = f"${poly_details.get('up_volume_24h', 0):,.0f} flowing into upside bets vs ${poly_details.get('down_volume_24h', 0):,.0f} into downside" if poly_details.get("up_volume_24h") else ""
+        reasons.append(f"Order flow shows buy pressure — {vol_detail}" if vol_detail else "Order flow shows buy-side pressure")
+    elif of_pressure in ("strong_sell", "sell") and side == "sell":
+        vol_detail = f"${poly_details.get('down_volume_24h', 0):,.0f} flowing into downside bets vs ${poly_details.get('up_volume_24h', 0):,.0f} into upside" if poly_details.get("down_volume_24h") else ""
+        reasons.append(f"Order flow shows sell pressure — {vol_detail}" if vol_detail else "Order flow shows sell-side pressure")
 
     # RSI — only show if it agrees
     if rsi > 70:

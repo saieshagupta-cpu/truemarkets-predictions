@@ -162,6 +162,7 @@ function PredictionView({
             sentiment={mispricing.sentiment_signal}
             indicators={mispricing.indicators}
             weights={{ lstm: 0.40, xgboost: 0.45, sentiment: 0.15 }}
+            orderFlow={mispricing.order_flow}
           />
           <PortfolioImpact refreshKey={portfolioKey} />
 

@@ -36,6 +36,30 @@ export interface RecommendedTrade {
   quote: { price: string; qty: string; total: string } | null;
 }
 
+export interface OrderFlow {
+  combined_signal: number;
+  pressure: "strong_buy" | "buy" | "neutral" | "sell" | "strong_sell";
+  polymarket_flow: {
+    signal: number;
+    details: {
+      up_volume_24h?: number;
+      down_volume_24h?: number;
+      volume_ratio?: number;
+      volume_acceleration?: number;
+      avg_spread?: number;
+      up_momentum?: number;
+      down_momentum?: number;
+      liquidity_ratio?: number;
+    };
+  };
+  truemarkets_flow: {
+    signal: number;
+    order_count: number;
+    buy_count: number;
+    sell_count: number;
+  };
+}
+
 export interface MispricingData {
   coin: string;
   symbol: string;
@@ -45,6 +69,7 @@ export interface MispricingData {
   indicators: { rsi: number; macd: number; volatility: number; fear_greed: number };
   signals: MispricingSignal[];
   polymarket_count: number;
+  order_flow: OrderFlow | null;
   recommended_trade: RecommendedTrade | null;
 }
 
