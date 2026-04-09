@@ -26,7 +26,7 @@ export default function Home() {
     if (!isRefresh) setPredLoading(true);
     setPredError(false);
     try {
-      const res = await fetch(`${API_BASE}/mispricing/bitcoin`);
+      const res = await fetch(`${API_BASE}/mispricing/bitcoin?_t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.signals) {

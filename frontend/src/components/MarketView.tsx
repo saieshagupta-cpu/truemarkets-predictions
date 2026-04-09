@@ -54,14 +54,14 @@ export default function MarketView() {
     load();
   }, []);
 
-  // Fast price poll every 10 seconds
+  // Price poll every 30 seconds
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${API_BASE}/price/bitcoin`);
+        const res = await fetch(`${API_BASE}/price/bitcoin?_t=${Date.now()}`, { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
-          if (data.price && stats) {
+          if (data.price) {
             setStats(prev => prev ? {
               ...prev,
               price: data.price,
@@ -72,15 +72,15 @@ export default function MarketView() {
           }
         }
       } catch { /* silent */ }
-    }, 30_000);  // 30 seconds
+    }, 30_000);
     return () => clearInterval(interval);
-  }, [stats]);
+  }, []);
 
   // Full stats refresh every 2 minutes
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${API_BASE}/market-stats/bitcoin`);
+        const res = await fetch(`${API_BASE}/market-stats/bitcoin?_t=${Date.now()}`, { cache: "no-store" });
         if (res.ok) setStats(await res.json());
       } catch { /* silent */ }
     }, 120_000);
