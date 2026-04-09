@@ -53,16 +53,6 @@ export default function CoinHero({ mispricing, market }: CoinHeroProps) {
 
         <div className="flex items-center gap-6">
           <div className="text-center">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-20 h-1.5 bg-tm-border rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${getConfColor(conf)}`} style={{ width: `${conf}%` }} />
-              </div>
-              <span className="text-xs font-medium">{conf}%</span>
-            </div>
-            <p className="text-[10px] text-tm-muted uppercase">Confidence</p>
-          </div>
-
-          <div className="text-center">
             <p className={`text-sm font-semibold ${getSentimentColor(sentiment.overall_signal)}`}>
               {sentiment.overall_signal}
             </p>

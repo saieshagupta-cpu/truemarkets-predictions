@@ -46,7 +46,6 @@ export default function RecommendedTrade({ trade, onOrderPlaced }: RecommendedTr
             isBuy ? "bg-tm-green/10 text-tm-green" : "bg-tm-red/10 text-tm-red"
           }`}>{trade.based_on_mispricing ? "mispricing" : "consensus"}</span>
         </div>
-        <span className="text-xs text-tm-muted">{Math.round(trade.confidence * 100)}% conf.</span>
       </div>
 
       {/* Reasons — compact */}
