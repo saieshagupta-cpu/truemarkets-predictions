@@ -16,8 +16,9 @@ from app.config import SUPPORTED_COINS
 router = APIRouter()
 
 _cache: dict = {}
-CACHE_TTL = 30  # 30 seconds for most endpoints
-CACHE_TTL_SLOW = 120  # 2 min for heavy endpoints (market-stats, chart)
+CACHE_TTL = 60  # 1 min default — keeps us under CoinGecko's 30 calls/min
+CACHE_TTL_FAST = 15  # 15s for lightweight price endpoint
+CACHE_TTL_SLOW = 180  # 3 min for heavy endpoints (market-stats, chart, historical)
 
 
 def _get_cached(key: str, ttl: int | None = None):
@@ -25,6 +26,13 @@ def _get_cached(key: str, ttl: int | None = None):
         data, ts = _cache[key]
         if time.time() - ts < (ttl or CACHE_TTL):
             return data
+    return None
+
+
+def _get_stale(key: str):
+    """Return cached data regardless of age. Better than crashing."""
+    if key in _cache:
+        return _cache[key][0]
     return None
 
 
@@ -66,6 +74,10 @@ async def get_predictions(coin: str = "bitcoin"):
         )
 
         if isinstance(historical, Exception):
+            # Try stale cache before failing
+            stale = _get_stale(f"predictions:{coin}")
+            if stale:
+                return stale
             raise HTTPException(status_code=502, detail="Failed to fetch price data")
         if isinstance(sentiment, Exception):
             sentiment = {"sentiment_score": 0, "post_volume": 0, "bullish_ratio": 0.5, "classification": "Neutral"}
@@ -93,7 +105,7 @@ async def get_predictions(coin: str = "bitcoin"):
 @router.get("/price/bitcoin")
 async def get_fast_price():
     """Lightweight price endpoint for frequent polling."""
-    cached = _get_cached("price:bitcoin", ttl=10)
+    cached = _get_cached("price:bitcoin", ttl=CACHE_TTL_FAST)
     if cached:
         return cached
 
@@ -136,6 +148,9 @@ async def get_market_data(coin: str = "bitcoin"):
         )
 
         if isinstance(price_data, Exception):
+            stale = _get_stale(f"market-data:{coin}")
+            if stale:
+                return stale
             raise HTTPException(status_code=502, detail="Failed to fetch price data")
 
         result = {
@@ -174,6 +189,9 @@ async def get_market_stats():
         )
 
         if isinstance(price_data, Exception):
+            stale = _get_stale("market-stats:bitcoin")
+            if stale:
+                return stale
             raise HTTPException(status_code=502, detail="Failed to fetch market stats")
 
         fg = fear_greed if not isinstance(fear_greed, Exception) else {"current": {"value": 50}}

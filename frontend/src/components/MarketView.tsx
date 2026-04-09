@@ -72,7 +72,7 @@ export default function MarketView() {
           }
         }
       } catch { /* silent */ }
-    }, 10_000);
+    }, 30_000);  // 30 seconds
     return () => clearInterval(interval);
   }, [stats]);
 
