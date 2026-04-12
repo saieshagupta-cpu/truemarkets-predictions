@@ -31,23 +31,43 @@ const PERIODS = [
   { label: "1Y", days: "365" },
 ];
 
+interface EnhancedSignals {
+  fear_greed: number;
+  fear_greed_class: string;
+  sentiment: string;
+  order_flow_pressure: string;
+  recommendation: string;
+}
+
 export default function MarketView() {
   const [stats, setStats] = useState<MarketStats | null>(null);
+  const [enhanced, setEnhanced] = useState<EnhancedSignals | null>(null);
   const [chart, setChart] = useState<number[][]>([]);
   const [activePeriod, setActivePeriod] = useState("1");
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
 
-  // Initial load: full stats + chart
+  // Initial load: full stats + chart + enhanced signals from prediction engine
   useEffect(() => {
     async function load() {
       try {
-        const [statsRes, chartRes] = await Promise.allSettled([
+        const [statsRes, chartRes, mispRes] = await Promise.allSettled([
           fetch(`${API_BASE}/market-stats/bitcoin`).then(r => r.json()),
           fetch(`${API_BASE}/chart/bitcoin?days=1`).then(r => r.json()),
+          fetch(`${API_BASE}/mispricing/bitcoin?_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
         ]);
         if (statsRes.status === "fulfilled") setStats(statsRes.value);
         if (chartRes.status === "fulfilled" && chartRes.value.prices) setChart(chartRes.value.prices);
+        if (mispRes.status === "fulfilled" && mispRes.value.indicators) {
+          const m = mispRes.value;
+          setEnhanced({
+            fear_greed: m.indicators.fear_greed,
+            fear_greed_class: m.indicators.fear_greed_classification || m.sentiment_signal.fear_greed,
+            sentiment: m.sentiment_signal.overall_signal,
+            order_flow_pressure: m.order_flow?.pressure || "neutral",
+            recommendation: m.recommended_trade?.side || "hold",
+          });
+        }
       } catch { /* */ }
       finally { setLoading(false); }
     }
@@ -116,8 +136,9 @@ export default function MarketView() {
 
   if (!stats) return <p className="text-center text-tm-muted py-20">Failed to load market data</p>;
 
-  const fg = stats.fear_greed?.current;
-  const fgValue = fg?.value ?? 50;
+  // Use enhanced FG from prediction engine (includes order flow), fallback to raw
+  const fgValue = enhanced?.fear_greed ?? stats.fear_greed?.current?.value ?? 50;
+  const fgClass = enhanced?.fear_greed_class ?? stats.fear_greed?.current?.classification ?? "Neutral";
 
   const fmt = (n: number, dec = 2) => n.toLocaleString(undefined, { maximumFractionDigits: dec });
   const fmtB = (n: number) => n >= 1e12 ? `$${(n / 1e12).toFixed(2)}T` : `$${(n / 1e9).toFixed(1)}B`;
@@ -204,7 +225,7 @@ export default function MarketView() {
             <span className={`text-sm font-bold ${
               fgValue <= 25 ? "text-tm-red" : fgValue <= 45 ? "text-tm-yellow" : fgValue <= 55 ? "text-tm-muted" : fgValue <= 75 ? "text-tm-green/80" : "text-tm-green"
             }`}>
-              {fgValue} &mdash; {fg?.classification ?? "Neutral"}
+              {fgValue} &mdash; {fgClass}
             </span>
           </div>
           <div className="relative h-2.5 rounded-full overflow-visible">
@@ -221,6 +242,34 @@ export default function MarketView() {
             <span>Extreme Greed</span>
           </div>
         </div>
+
+        {/* Prediction signals — synced from prediction engine */}
+        {enhanced && (
+          <div className="bg-tm-card border border-tm-border rounded-xl p-3">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <p className="text-[10px] text-tm-muted mb-0.5">Sentiment</p>
+                <p className={`text-sm font-bold ${
+                  enhanced.sentiment.toLowerCase().includes("bullish") ? "text-tm-green" :
+                  enhanced.sentiment.toLowerCase().includes("bearish") ? "text-tm-red" : "text-tm-muted"
+                }`}>{enhanced.sentiment}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-tm-muted mb-0.5">Order Flow</p>
+                <p className={`text-sm font-bold ${
+                  enhanced.order_flow_pressure.includes("buy") ? "text-tm-green" :
+                  enhanced.order_flow_pressure.includes("sell") ? "text-tm-red" : "text-tm-muted"
+                }`}>{enhanced.order_flow_pressure.replace("_", " ").replace(/\b\w/g, c => c.toUpperCase())}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-tm-muted mb-0.5">Signal</p>
+                <p className={`text-sm font-bold ${
+                  enhanced.recommendation === "buy" ? "text-tm-green" : "text-tm-red"
+                }`}>{enhanced.recommendation.toUpperCase()}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats rows */}
         <div className="bg-tm-card border border-tm-border rounded-xl p-3 space-y-2">
