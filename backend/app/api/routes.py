@@ -525,14 +525,17 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
     best_up = nearest_up["our_prob"] if nearest_up else 0
     best_down = nearest_down["our_prob"] if nearest_down else 0
 
-    if best_up > best_down * 1.3:
+    # Model ALWAYS votes — it's the core prediction
+    if best_up > best_down:
         votes.append(+1)
-        up_t = int(float(nearest_up["threshold"]))
-        vote_reasons.append(("buy", f"Model: {int(best_up*100)}% upside to ${up_t:,} vs {int(best_down*100)}% downside"))
-    elif best_down > best_up * 1.3:
+        up_t = int(float(nearest_up["threshold"])) if nearest_up else 0
+        ratio = best_up / max(best_down, 0.01)
+        vote_reasons.append(("buy", f"Model: {int(best_up*100)}% upside to ${up_t:,} ({ratio:.1f}x more likely than {int(best_down*100)}% downside)"))
+    elif best_down > best_up:
         votes.append(-1)
-        down_t = int(float(nearest_down["threshold"]))
-        vote_reasons.append(("sell", f"Model: {int(best_down*100)}% downside to ${down_t:,} vs {int(best_up*100)}% upside"))
+        down_t = int(float(nearest_down["threshold"])) if nearest_down else 0
+        ratio = best_down / max(best_up, 0.01)
+        vote_reasons.append(("sell", f"Model: {int(best_down*100)}% downside to ${down_t:,} ({ratio:.1f}x more likely than {int(best_up*100)}% upside)"))
 
     # 4. RSI
     if rsi > 70:
