@@ -16,9 +16,9 @@ from app.config import SUPPORTED_COINS
 router = APIRouter()
 
 _cache: dict = {}
-CACHE_TTL = 60  # 1 min default — keeps us under CoinGecko's 30 calls/min
-CACHE_TTL_FAST = 15  # 15s for lightweight price endpoint
-CACHE_TTL_SLOW = 180  # 3 min for heavy endpoints (market-stats, chart, historical)
+CACHE_TTL = 30  # 30s default
+CACHE_TTL_FAST = 10  # 10s for lightweight price endpoint
+CACHE_TTL_SLOW = 120  # 2 min for heavy endpoints (market-stats, chart)
 
 
 def _get_cached(key: str, ttl: int | None = None):
@@ -487,145 +487,79 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
 
     fg = indicators.get("fear_greed", 50)
     rsi = indicators.get("rsi", 50)
-
-    # ── 1. Model direction: compare up vs down probabilities ──
-    up_signals = [s for s in signals if s["direction"] == "up"]
-    down_signals = [s for s in signals if s["direction"] == "down"]
-    # Use the nearest threshold as the most relevant
-    nearest_up = max(up_signals, key=lambda s: s["our_prob"]) if up_signals else None
-    nearest_down = max(down_signals, key=lambda s: s["our_prob"]) if down_signals else None
-    best_up_prob = nearest_up["our_prob"] if nearest_up else 0
-    best_down_prob = nearest_down["our_prob"] if nearest_down else 0
-
-    # Model leans toward whichever direction has higher probability
-    if best_up_prob > best_down_prob:
-        model_direction = "bullish"
-    elif best_down_prob > best_up_prob:
-        model_direction = "bearish"
-    else:
-        model_direction = "neutral"
-
-    # ── 2. Polymarket analysis: look at BOTH sides ──
-    has_poly = any(s["poly_prob"] is not None for s in signals)
-    poly_up = [s for s in up_signals if s["poly_prob"] is not None]
-    poly_down = [s for s in down_signals if s["poly_prob"] is not None]
-
-    # Is Polymarket pricing high volatility in both directions?
-    poly_up_avg = sum(s["poly_prob"] for s in poly_up) / max(len(poly_up), 1) if poly_up else 0
-    poly_down_avg = sum(s["poly_prob"] for s in poly_down) / max(len(poly_down), 1) if poly_down else 0
-    poly_both_high = poly_up_avg > 0.4 and poly_down_avg > 0.4
-
-    # ── 3. Fear & Greed: fear = bearish, greed = bullish ──
-    if fg <= 20:
-        fg_signal = "strongly_bearish"
-    elif fg <= 40:
-        fg_signal = "bearish"
-    elif fg >= 80:
-        fg_signal = "strongly_bullish"
-    elif fg >= 60:
-        fg_signal = "bullish"
-    else:
-        fg_signal = "neutral"
-
-    # ── 4. Score: accumulate bullish/bearish evidence ──
-    # Positive = bullish, negative = bearish
-    # Model is primary signal (highest weight)
-    score = 0.0
-    reasons = []
-
-    # Model direction (dominant weight — this is what we built the model for)
-    if best_up_prob > 0 or best_down_prob > 0:
-        model_ratio = best_up_prob / max(best_up_prob + best_down_prob, 0.01)
-        # model_ratio: 0=fully bearish, 0.5=neutral, 1=fully bullish
-        score += (model_ratio - 0.5) * 8  # strong: ±4 range
-
-    # Fear & Greed (secondary: fear = bearish, greed = bullish)
-    if fg_signal == "strongly_bearish":
-        score -= 1.5
-    elif fg_signal == "bearish":
-        score -= 0.75
-    elif fg_signal == "strongly_bullish":
-        score += 1.5
-    elif fg_signal == "bullish":
-        score += 0.75
-
-    # Order flow (from Polymarket microstructure + True Markets orders)
     of = order_flow or {}
     of_signal = of.get("combined_signal", 0)
     of_pressure = of.get("pressure", "neutral")
-    if of_signal != 0:
-        score += of_signal * 2  # ±2 range, same tier as FG
-
-    # Preliminary side decision
-    side = "buy" if score >= 0 else "sell"
-
-    # Model probability context — only if it agrees with the side
-    if nearest_up and nearest_down:
-        up_t = int(float(nearest_up["threshold"]))
-        down_t = int(float(nearest_down["threshold"]))
-        up_pct = int(best_up_prob * 100)
-        down_pct = int(best_down_prob * 100)
-        if side == "buy" and best_up_prob > best_down_prob:
-            ratio = best_up_prob / max(best_down_prob, 0.01)
-            reasons.insert(0, f"Our model predicts upward movement is {ratio:.1f}x more likely — {up_pct}% chance of reaching ${up_t:,} vs {down_pct}% chance of dropping to ${down_t:,}")
-        elif side == "sell" and best_down_prob > best_up_prob:
-            ratio = best_down_prob / max(best_up_prob, 0.01)
-            reasons.insert(0, f"Our model predicts downward movement is {ratio:.1f}x more likely — {down_pct}% chance of dropping to ${down_t:,} vs {up_pct}% chance of reaching ${up_t:,}")
-        elif side == "buy":
-            reasons.insert(0, f"Our model sees {up_pct}% upside to ${up_t:,} — supported by other signals")
-        else:
-            reasons.insert(0, f"Our model sees {down_pct}% downside to ${down_t:,} — supported by other signals")
-
-    # Polymarket analysis — only include bullets that support the recommendation
-    if has_poly:
-        if side == "buy" and poly_up_avg > poly_down_avg:
-            reasons.append(f"Polymarket leans bullish — {int(poly_up_avg*100)}% upside vs {int(poly_down_avg*100)}% downside")
-        elif side == "sell" and poly_down_avg > poly_up_avg:
-            reasons.append(f"Polymarket leans bearish — {int(poly_down_avg*100)}% downside vs {int(poly_up_avg*100)}% upside")
-
-        if nearest_up and nearest_down:
-            if side == "buy" and poly_up:
-                nearest_poly_up = min(poly_up, key=lambda s: float(s["threshold"]))
-                poly_up_pct = int(nearest_poly_up["poly_prob"] * 100)
-                our_up_pct = int(nearest_poly_up["our_prob"] * 100)
-                t = int(float(nearest_poly_up["threshold"]))
-                if poly_up_pct >= our_up_pct:
-                    reasons.append(f"Polymarket also sees upside — {poly_up_pct}% chance of reaching ${t:,}")
-            elif side == "sell" and poly_down:
-                nearest_poly_down = min(poly_down, key=lambda s: abs(float(s["threshold"]) - current_price))
-                poly_down_pct = int(nearest_poly_down["poly_prob"] * 100)
-                our_down_pct = int(nearest_poly_down["our_prob"] * 100)
-                t = int(float(nearest_poly_down["threshold"]))
-                if poly_down_pct >= our_down_pct:
-                    reasons.append(f"Polymarket also sees downside — {poly_down_pct}% chance of dropping to ${t:,}")
-
-    # Order flow reason — only if it agrees
     poly_details = of.get("polymarket_flow", {}).get("details", {})
-    if of_pressure in ("strong_buy", "buy") and side == "buy":
-        vol_detail = f"${poly_details.get('up_volume_24h', 0):,.0f} flowing into upside bets vs ${poly_details.get('down_volume_24h', 0):,.0f} into downside" if poly_details.get("up_volume_24h") else ""
-        reasons.append(f"Order flow shows buy pressure — {vol_detail}" if vol_detail else "Order flow shows buy-side pressure")
-    elif of_pressure in ("strong_sell", "sell") and side == "sell":
-        vol_detail = f"${poly_details.get('down_volume_24h', 0):,.0f} flowing into downside bets vs ${poly_details.get('up_volume_24h', 0):,.0f} into upside" if poly_details.get("down_volume_24h") else ""
-        reasons.append(f"Order flow shows sell pressure — {vol_detail}" if vol_detail else "Order flow shows sell-side pressure")
-
-    # RSI — only show if it agrees
-    if rsi > 70:
-        score -= 1
-        if side == "sell":
-            reasons.append(f"RSI at {rsi:.0f} — overbought, pullback likely")
-    elif rsi < 30:
-        score += 1
-        if side == "buy":
-            reasons.append(f"RSI at {rsi:.0f} — oversold, bounce likely")
-
-    # Overall sentiment — only include if it agrees with the side
     sent_text = sentiment.get("overall_signal", "Neutral")
-    sent_lower = sent_text.lower()
-    if (side == "buy" and "bullish" in sent_lower) or (side == "sell" and "bearish" in sent_lower):
-        reasons.append(f"Overall sentiment: {sent_text}")
 
-    # ── Final decision (re-evaluate after all signals) ──
-    side = "buy" if score >= 0 else "sell"
+    # ── Gather all live signals as votes: +1 (buy) or -1 (sell) ──
+    votes = []
+    vote_reasons = []
+
+    # 1. Order flow (most real-time — actual money moving)
+    if of_pressure in ("strong_buy", "buy"):
+        votes.append(+1)
+        up_v = poly_details.get("up_volume_24h", 0)
+        dn_v = poly_details.get("down_volume_24h", 0)
+        vote_reasons.append(("buy", f"Order flow: ${up_v:,.0f} into upside vs ${dn_v:,.0f} downside"))
+    elif of_pressure in ("strong_sell", "sell"):
+        votes.append(-1)
+        up_v = poly_details.get("up_volume_24h", 0)
+        dn_v = poly_details.get("down_volume_24h", 0)
+        vote_reasons.append(("sell", f"Order flow: ${dn_v:,.0f} into downside vs ${up_v:,.0f} upside"))
+
+    # 2. Fear & Greed
+    if fg <= 30:
+        votes.append(-1)
+        vote_reasons.append(("sell", f"Fear & Greed at {int(fg)} — market in fear"))
+    elif fg >= 70:
+        votes.append(+1)
+        vote_reasons.append(("buy", f"Fear & Greed at {int(fg)} — market greedy"))
+
+    # 3. Model direction
+    up_signals = [s for s in signals if s["direction"] == "up"]
+    down_signals = [s for s in signals if s["direction"] == "down"]
+    nearest_up = max(up_signals, key=lambda s: s["our_prob"]) if up_signals else None
+    nearest_down = max(down_signals, key=lambda s: s["our_prob"]) if down_signals else None
+    best_up = nearest_up["our_prob"] if nearest_up else 0
+    best_down = nearest_down["our_prob"] if nearest_down else 0
+
+    if best_up > best_down * 1.3:
+        votes.append(+1)
+        up_t = int(float(nearest_up["threshold"]))
+        vote_reasons.append(("buy", f"Model: {int(best_up*100)}% upside to ${up_t:,} vs {int(best_down*100)}% downside"))
+    elif best_down > best_up * 1.3:
+        votes.append(-1)
+        down_t = int(float(nearest_down["threshold"]))
+        vote_reasons.append(("sell", f"Model: {int(best_down*100)}% downside to ${down_t:,} vs {int(best_up*100)}% upside"))
+
+    # 4. RSI
+    if rsi > 70:
+        votes.append(-1)
+        vote_reasons.append(("sell", f"RSI at {rsi:.0f} — overbought"))
+    elif rsi < 30:
+        votes.append(+1)
+        vote_reasons.append(("buy", f"RSI at {rsi:.0f} — oversold"))
+
+    # 5. Sentiment
+    if "bullish" in sent_text.lower():
+        votes.append(+1)
+        vote_reasons.append(("buy", f"Sentiment: {sent_text}"))
+    elif "bearish" in sent_text.lower():
+        votes.append(-1)
+        vote_reasons.append(("sell", f"Sentiment: {sent_text}"))
+
+    # ── Decision: majority vote ──
+    total_votes = sum(votes) if votes else 0
+    side = "buy" if total_votes > 0 else "sell" if total_votes < 0 else "buy"
+
+    # Only show reasons that agree
+    reasons = [reason for vote_side, reason in vote_reasons if vote_side == side]
+    if not reasons and vote_reasons:
+        reasons = [vote_reasons[0][1]]
+
+    has_poly = any(s["poly_prob"] is not None for s in signals)
 
     # Find the strongest single signal for the "based_on" field
     actionable = [s for s in signals if s["diff"] is not None and abs(s["diff"]) > 0.10]

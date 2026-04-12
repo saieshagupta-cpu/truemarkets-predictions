@@ -98,7 +98,7 @@ export default function MarketView() {
           }
         }
       } catch { /* silent */ }
-    }, 30_000);
+    }, 15_000);  // 15 seconds
     return () => clearInterval(interval);
   }, []);
 

@@ -11,7 +11,7 @@ import SignalBreakdown from "@/components/SignalBreakdown";
 import type { MispricingData } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
-const PREDICTION_INTERVAL = 60 * 1000;  // 60 seconds
+const PREDICTION_INTERVAL = 30 * 1000;  // 30 seconds
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"market" | "prediction">("market");
