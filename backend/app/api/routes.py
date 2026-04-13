@@ -11,7 +11,10 @@ from app.data.social_sentiment import fetch_social_sentiment
 from app.data.order_flow import fetch_order_flow
 from app.data.polymarket import fetch_polymarket_markets
 from app.data import truemarkets
+from app.models.next_day import NextDayPredictor
 from app.config import SUPPORTED_COINS
+
+_next_day_model = NextDayPredictor()
 
 router = APIRouter()
 
@@ -447,10 +450,31 @@ async def get_mispricing(coin: str = "bitcoin"):
         "fear_greed": fg_class,
     }
 
+    # ── Next-day prediction model ──
+    # Use prediction indicators + fetch fresh price data for returns
+    try:
+        hist = await fetch_historical_prices(cfg["coingecko_id"], days=90)
+        nd_feats = {}
+        for col in ["rsi","volatility_20d","volatility_ratio","volume_change","relative_volume",
+                     "rsi_momentum","price_position","bollinger_position",
+                     "return_1d","return_3d","return_7d","return_14d","return_30d"]:
+            nd_feats[col] = float(hist[col].iloc[-1]) if col in hist.columns else 0
+        nd_feats["bb_position"] = nd_feats.pop("bollinger_position", 0.5)
+        nd_feats["macd_hist"] = float(hist["macd"].iloc[-1] - hist["macd_signal"].iloc[-1]) if "macd_signal" in hist.columns else 0
+        nd_feats["return_2d"] = float(hist["price"].pct_change(2).iloc[-1]) if len(hist) > 2 else 0
+        nd_feats["return_5d"] = float(hist["price"].pct_change(5).iloc[-1]) if len(hist) > 5 else 0
+        nd_feats["return_21d"] = float(hist["price"].pct_change(21).iloc[-1]) if len(hist) > 21 else 0
+        nd_feats["vol_trend"] = 1.0
+        nd_feats["streak"] = 0
+    except Exception:
+        nd_feats = {"rsi": enhanced_indicators.get("rsi", 50), "volatility_20d": enhanced_indicators.get("volatility", 0.02)}
+
+    next_day = _next_day_model.predict(nd_feats)
+
     # ── Generate single recommended trade ──
     prediction_with_enhanced = {**prediction, "indicators": enhanced_indicators, "sentiment_signal": enhanced_sentiment}
     recommended = await _build_recommendation(
-        signals, prediction_with_enhanced, cfg, polymarket_markets, order_flow
+        signals, prediction_with_enhanced, cfg, polymarket_markets, order_flow, next_day
     )
 
     result = {
@@ -463,6 +487,7 @@ async def get_mispricing(coin: str = "bitcoin"):
         "signals": signals,
         "polymarket_count": len(polymarket_markets),
         "order_flow": order_flow,
+        "next_day_prediction": next_day,
         "recommended_trade": recommended,
     }
 
@@ -470,7 +495,7 @@ async def get_mispricing(coin: str = "bitcoin"):
     return result
 
 
-async def _build_recommendation(signals: list, prediction: dict, cfg: dict, polymarket_markets: list, order_flow: dict | None = None) -> dict:
+async def _build_recommendation(signals: list, prediction: dict, cfg: dict, polymarket_markets: list, order_flow: dict | None = None, next_day: dict | None = None) -> dict:
     """
     Build a single recommended action by weighing ALL signals together:
     1. Model's directional view (up vs down probabilities)
@@ -525,17 +550,29 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
     best_up = nearest_up["our_prob"] if nearest_up else 0
     best_down = nearest_down["our_prob"] if nearest_down else 0
 
-    # Model ALWAYS votes — it's the core prediction
+    # Next-day model (trained on 3yr, predicts tomorrow's direction)
+    nd = next_day or {}
+    nd_dir = nd.get("direction", "up")
+    nd_prob = nd.get("probability", 0.5)
+    nd_pct = int(nd_prob * 100)
+    if nd_dir == "up":
+        votes.append(+1)
+        vote_reasons.append(("buy", f"Next-day model: {nd_pct}% probability BTC rises tomorrow"))
+    else:
+        votes.append(-1)
+        vote_reasons.append(("sell", f"Next-day model: {100 - nd_pct}% probability BTC falls tomorrow"))
+
+    # 30-day ensemble model (for context)
     up_t = int(float(nearest_up["threshold"])) if nearest_up else 0
     down_t = int(float(nearest_down["threshold"])) if nearest_down else 0
     up_pct = int(best_up * 100)
     down_pct = int(best_down * 100)
     if best_up > best_down:
         votes.append(+1)
-        vote_reasons.append(("buy", f"Model: {up_pct}% chance BTC reaches ${up_t:,} vs {down_pct}% drops to ${down_t:,}"))
+        vote_reasons.append(("buy", f"30-day model: {up_pct}% upside to ${up_t:,} vs {down_pct}% downside"))
     elif best_down > best_up:
         votes.append(-1)
-        vote_reasons.append(("sell", f"Model: {down_pct}% chance BTC drops to ${down_t:,} vs {up_pct}% reaches ${up_t:,}"))
+        vote_reasons.append(("sell", f"30-day model: {down_pct}% downside to ${down_t:,} vs {up_pct}% upside"))
 
     # 4. RSI
     if rsi > 70:
@@ -553,28 +590,23 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
         votes.append(-1)
         vote_reasons.append(("sell", f"Sentiment: {sent_text}"))
 
-    # ── Decision: majority vote, model gets 2 votes (it's the core) ──
-    # Recount with model getting double weight
-    model_vote = [v for v, (vs, _) in zip(votes, vote_reasons) if "Model:" in _]
-    other_votes = [v for v, (vs, _) in zip(votes, vote_reasons) if "Model:" not in _]
-    # Model counts double
-    total_votes = sum(model_vote) * 2 + sum(other_votes) if votes else 0
+    # ── Decision: majority vote ──
+    # Next-day model gets 2x weight (purpose-built for this), 30-day gets 1x, others 1x
+    total_votes = 0
+    for v, (_, reason) in zip(votes, vote_reasons):
+        if "Next-day" in reason:
+            total_votes += v * 2  # next-day model gets double weight
+        else:
+            total_votes += v
     side = "buy" if total_votes > 0 else "sell" if total_votes < 0 else "buy"
 
-    # Build reasons: model ALWAYS first, then supporting signals
-    model_dir = "buy" if best_up > best_down else "sell"
-    if model_dir == side:
-        # Model agrees with recommendation
-        if side == "buy":
-            model_line = f"Model predicts {up_pct}% upside to ${up_t:,} vs {down_pct}% downside to ${down_t:,}"
-        else:
-            model_line = f"Model predicts {down_pct}% downside to ${down_t:,} vs {up_pct}% upside to ${up_t:,}"
-    else:
-        # Model disagrees — be transparent
-        model_line = f"Model leans {'up' if model_dir == 'buy' else 'down'} ({up_pct}% to ${up_t:,} / {down_pct}% to ${down_t:,}) but outvoted by market signals"
-
-    supporting = [reason for vote_side, reason in vote_reasons if vote_side == side and "Model:" not in reason]
-    reasons = [model_line] + supporting
+    # Build reasons: next-day model first, then supporting signals
+    # All reasons that voted for the winning side
+    supporting = [reason for vote_side, reason in vote_reasons if vote_side == side]
+    # If no supporting reasons, show all
+    if not supporting:
+        supporting = [reason for _, reason in vote_reasons]
+    reasons = supporting
 
     if not reasons and vote_reasons:
         reasons = [vote_reasons[0][1]]
