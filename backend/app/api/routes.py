@@ -590,73 +590,68 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
         votes.append(-1)
         vote_reasons.append(("sell", f"Sentiment: {sent_text}"))
 
-    # ── Decision: majority vote ──
-    # Next-day model gets 2x weight (purpose-built for this), 30-day gets 1x, others 1x
-    total_votes = 0
-    for v, (_, reason) in zip(votes, vote_reasons):
-        if "Next-day" in reason:
-            total_votes += v * 2  # next-day model gets double weight
-        else:
-            total_votes += v
-    side = "buy" if total_votes > 0 else "sell" if total_votes < 0 else "buy"
+    # ── Count votes per side ──
+    buy_reasons = [reason for vote_side, reason in vote_reasons if vote_side == "buy"]
+    sell_reasons = [reason for vote_side, reason in vote_reasons if vote_side == "sell"]
+    buy_count = sum(1 for vs, _ in vote_reasons if vs == "buy")
+    sell_count = sum(1 for vs, _ in vote_reasons if vs == "sell")
 
-    # Build reasons: next-day model first, then supporting signals
-    # All reasons that voted for the winning side
-    supporting = [reason for vote_side, reason in vote_reasons if vote_side == side]
-    # If no supporting reasons, show all
-    if not supporting:
-        supporting = [reason for _, reason in vote_reasons]
-    reasons = supporting
+    # Determine if signals are split or aligned
+    total_signals = buy_count + sell_count
+    split = total_signals > 0 and min(buy_count, sell_count) > 0 and abs(buy_count - sell_count) <= 1
 
-    if not reasons and vote_reasons:
-        reasons = [vote_reasons[0][1]]
+    # Primary side: majority
+    side = "buy" if buy_count >= sell_count else "sell"
 
     has_poly = any(s["poly_prob"] is not None for s in signals)
-
-    # Find the strongest single signal for the "based_on" field
     actionable = [s for s in signals if s["diff"] is not None and abs(s["diff"]) > 0.10]
     strongest = actionable[0] if actionable else None
 
-    # Get quote — use real market price, with True Markets API for execution
+    # Quote
     quote = None
     try:
-        quote_data = await truemarkets.get_quote(
-            base_asset=base_asset,
-            quote_asset="USD",
-            side=side,
-            qty="1",
-            qty_unit="base",
-        )
+        quote_data = await truemarkets.get_quote(base_asset=base_asset, quote_asset="USD", side=side, qty="1", qty_unit="base")
         api_price = float(quote_data.get("price", "0"))
-        # Use current market price if API returns stale/mock data
         price = current_price if abs(api_price - current_price) / current_price > 0.05 else api_price
-        quote = {
-            "price": str(round(price, 2)),
-            "qty": "1",
-            "total": str(round(price, 2)),
-        }
+        quote = {"price": str(round(price, 2)), "qty": "1", "total": str(round(price, 2))}
     except Exception:
-        # Fallback to current market price
-        quote = {
-            "price": str(round(current_price, 2)),
-            "qty": "1",
-            "total": str(round(current_price, 2)),
-        }
+        quote = {"price": str(round(current_price, 2)), "qty": "1", "total": str(round(current_price, 2))}
 
-    return {
-        "side": side,
-        "symbol": symbol,
-        "base_asset": base_asset,
-        "confidence": prediction["confidence"],
-        "reasons": reasons,
-        "based_on_mispricing": strongest is not None,
-        "strongest_signal": {
-            "threshold": strongest["threshold"],
-            "diff": strongest["diff"],
-            "signal": strongest["signal"],
-        } if strongest else None,
-        "quote": quote,
-    }
+    if split:
+        # Signals disagree — return BOTH cases
+        return {
+            "mode": "split",
+            "symbol": symbol,
+            "base_asset": base_asset,
+            "buy_case": {
+                "side": "buy",
+                "reasons": buy_reasons,
+                "vote_count": buy_count,
+            },
+            "sell_case": {
+                "side": "sell",
+                "reasons": sell_reasons,
+                "vote_count": sell_count,
+            },
+            "primary_side": side,
+            "confidence": prediction["confidence"],
+            "based_on_mispricing": strongest is not None,
+            "quote": quote,
+        }
+    else:
+        # Clear consensus — single recommendation
+        return {
+            "mode": "consensus",
+            "side": side,
+            "symbol": symbol,
+            "base_asset": base_asset,
+            "confidence": prediction["confidence"],
+            "reasons": buy_reasons if side == "buy" else sell_reasons,
+            "vote_count": buy_count if side == "buy" else sell_count,
+            "total_signals": total_signals,
+            "based_on_mispricing": strongest is not None,
+            "quote": quote,
+        }
 
 
 # ─── Trade (True Markets Gateway API) ───────────────────
