@@ -112,6 +112,20 @@ async def get_fast_price():
     if cached:
         return cached
 
+    # Primary: True Markets MCP price (pushed by frontend/cron)
+    tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
+    if tm_age < 180 and _tm_data["price"] > 0:
+        result = {
+            "price": _tm_data["price"],
+            "change_24h": 0,
+            "volume_24h": 0,
+            "timestamp": _tm_data["updated"],
+            "source": "truemarkets",
+        }
+        _set_cached("price:bitcoin", result)
+        return result
+
+    # Fallback: CoinGecko
     try:
         data = await fetch_current_price("bitcoin")
         result = {
@@ -119,14 +133,14 @@ async def get_fast_price():
             "change_24h": data["change_24h"],
             "volume_24h": data["volume_24h"],
             "timestamp": time.time(),
+            "source": "coingecko",
         }
         _set_cached("price:bitcoin", result)
         return result
     except Exception:
-        # Return stale cache if available
-        if "price:bitcoin" in _cache:
-            return _cache["price:bitcoin"][0]
-        return {"price": 0, "change_24h": 0, "volume_24h": 0, "timestamp": 0}
+        stale = _get_stale("price:bitcoin")
+        if stale: return stale
+        return {"price": 0, "change_24h": 0, "volume_24h": 0, "timestamp": 0, "source": "none"}
 
 
 # ─── Market Data ─────────────────────────────────────────
@@ -184,7 +198,43 @@ async def get_market_stats():
     if cached:
         return cached
 
+    # Primary: True Markets MCP data when fresh
+    tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
+    tm_fresh = tm_age < 180 and _tm_data["price"] > 0
+
     try:
+        if tm_fresh:
+            # Use TM price, still get FG from Alternative.me
+            try:
+                fear_greed = await fetch_fear_greed(limit=1)
+            except Exception:
+                fear_greed = {"current": {"value": 50}}
+
+            result = {
+                "price": _tm_data["price"],
+                "change_24h_pct": 0,
+                "change_24h_usd": 0,
+                "market_cap": 0,
+                "volume_24h": 0,
+                "high_24h": 0,
+                "low_24h": 0,
+                "ath": 0,
+                "atl": 0,
+                "circulating_supply": 0,
+                "max_supply": 21000000,
+                "total_supply": 0,
+                "price_change_7d": 0,
+                "price_change_30d": 0,
+                "price_change_1y": 0,
+                "fear_greed": fear_greed,
+                "source": "truemarkets",
+                "tm_sentiment": _tm_data["sentiment"],
+                "tm_summary": _tm_data["summary"],
+            }
+            _set_cached("market-stats:bitcoin", result)
+            return result
+
+        # Fallback: CoinGecko
         price_data, fear_greed = await asyncio.gather(
             _fetch_detailed_btc_stats(),
             fetch_fear_greed(limit=1),
@@ -193,13 +243,12 @@ async def get_market_stats():
 
         if isinstance(price_data, Exception):
             stale = _get_stale("market-stats:bitcoin")
-            if stale:
-                return stale
+            if stale: return stale
             raise HTTPException(status_code=502, detail="Failed to fetch market stats")
 
         fg = fear_greed if not isinstance(fear_greed, Exception) else {"current": {"value": 50}}
 
-        result = {**price_data, "fear_greed": fg}
+        result = {**price_data, "fear_greed": fg, "source": "coingecko"}
         _set_cached("market-stats:bitcoin", result)
         return result
 
@@ -258,9 +307,16 @@ CHART_PERIODS = {
 
 @router.get("/chart/bitcoin")
 async def get_chart_data(days: str = "1"):
-    """Price chart data for BTC."""
+    """Price chart data for BTC. Uses TM MCP data when fresh for 1D charts."""
     if days not in CHART_PERIODS:
         days = "1"
+
+    # Primary: True Markets MCP chart data for 1D when fresh
+    tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
+    if days == "1" and tm_age < 180 and _tm_data["chart"]:
+        result = {"prices": _tm_data["chart"], "days": "1", "source": "truemarkets"}
+        _chart_cache["1"] = (result, time.time())
+        return result
 
     # Check chart-specific cache (longer TTL)
     cache_ttl = 600 if days in ("1", "5") else 3600
@@ -269,6 +325,7 @@ async def get_chart_data(days: str = "1"):
         if time.time() - ts < cache_ttl:
             return data
 
+    # Fallback: CoinGecko
     import httpx as _httpx
     cg_days = _ytd_days() if days == "ytd" else CHART_PERIODS[days]
     try:
@@ -754,7 +811,7 @@ async def cancel_trade_order(order_id: str):
 # ─── True Markets MCP Data Ingest ────────────────────────
 # Frontend pushes TM MCP data here. Backend stores and uses it.
 
-_tm_data: dict = {"price": 0, "sentiment": "neutral", "summary": "", "trending": [], "surging": [], "updated": 0}
+_tm_data: dict = {"price": 0, "sentiment": "neutral", "summary": "", "trending": [], "surging": [], "chart": [], "updated": 0}
 
 class TMDataPush(BaseModel):
     price: float = 0
@@ -762,6 +819,7 @@ class TMDataPush(BaseModel):
     summary: str = ""
     trending: list = []
     surging: list = []
+    chart: list = []  # [[timestamp_ms, price], ...]
 
 @router.post("/tm/push")
 async def push_tm_data(data: TMDataPush):
@@ -771,6 +829,8 @@ async def push_tm_data(data: TMDataPush):
     _tm_data["summary"] = data.summary
     _tm_data["trending"] = data.trending
     _tm_data["surging"] = data.surging
+    if data.chart:
+        _tm_data["chart"] = data.chart
     _tm_data["updated"] = time.time()
     return {"status": "ok", "updated": _tm_data["updated"]}
 
