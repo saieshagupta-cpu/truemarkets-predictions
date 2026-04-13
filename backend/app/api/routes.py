@@ -324,6 +324,13 @@ async def get_mispricing(coin: str = "bitcoin"):
     except Exception:
         order_flow = {"combined_signal": 0, "pressure": "neutral", "polymarket_flow": {"signal": 0, "details": {}}, "truemarkets_flow": {"signal": 0, "order_count": 0}}
 
+    # Get True Markets MCP data (pushed by frontend)
+    tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
+    tm_ai_sentiment = _tm_data["sentiment"] if tm_age < 120 else "neutral"
+    tm_price = _tm_data["price"] if tm_age < 120 and _tm_data["price"] > 0 else None
+    tm_trending = _tm_data["trending"] if tm_age < 120 else []
+    tm_surging = _tm_data["surging"] if tm_age < 120 else []
+
     # Build threshold -> Polymarket prob lookup
     poly_by_threshold: dict[str, dict] = {}
     for m in polymarket_markets:
@@ -474,7 +481,8 @@ async def get_mispricing(coin: str = "bitcoin"):
     # ── Generate single recommended trade ──
     prediction_with_enhanced = {**prediction, "indicators": enhanced_indicators, "sentiment_signal": enhanced_sentiment}
     recommended = await _build_recommendation(
-        signals, prediction_with_enhanced, cfg, polymarket_markets, order_flow, next_day
+        signals, prediction_with_enhanced, cfg, polymarket_markets, order_flow, next_day,
+        tm_ai_sentiment, tm_price, tm_trending, tm_surging
     )
 
     result = {
@@ -488,6 +496,14 @@ async def get_mispricing(coin: str = "bitcoin"):
         "polymarket_count": len(polymarket_markets),
         "order_flow": order_flow,
         "next_day_prediction": next_day,
+        "tm_data": {
+            "sentiment": tm_ai_sentiment,
+            "price": tm_price,
+            "trending_count": len(tm_trending),
+            "surging_count": len(tm_surging),
+            "age_seconds": round(tm_age, 1),
+            "live": tm_age < 120,
+        },
         "recommended_trade": recommended,
     }
 
@@ -495,7 +511,7 @@ async def get_mispricing(coin: str = "bitcoin"):
     return result
 
 
-async def _build_recommendation(signals: list, prediction: dict, cfg: dict, polymarket_markets: list, order_flow: dict | None = None, next_day: dict | None = None) -> dict:
+async def _build_recommendation(signals: list, prediction: dict, cfg: dict, polymarket_markets: list, order_flow: dict | None = None, next_day: dict | None = None, tm_sentiment: str = "neutral", tm_price: float | None = None, tm_trending: list | None = None, tm_surging: list | None = None) -> dict:
     """
     Build a single recommended action by weighing ALL signals together:
     1. Model's directional view (up vs down probabilities)
@@ -589,6 +605,27 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
     elif "bearish" in sent_text.lower():
         votes.append(-1)
         vote_reasons.append(("sell", f"Sentiment: {sent_text}"))
+
+    # 6. True Markets AI sentiment (from 30+ news articles via MCP)
+    if tm_sentiment.lower() == "bullish":
+        votes.append(+1)
+        vote_reasons.append(("buy", "True Markets AI: bullish (30+ news sources)"))
+    elif tm_sentiment.lower() == "bearish":
+        votes.append(-1)
+        vote_reasons.append(("sell", "True Markets AI: bearish (30+ news sources)"))
+
+    # 7. True Markets exchange momentum (surging assets)
+    if tm_surging:
+        # Check if BTC is surging
+        btc_surge = next((a for a in tm_surging if a.get("symbol") == "BTC"), None)
+        if btc_surge:
+            pct_1h = float(btc_surge.get("price_change_pct_1h", 0))
+            if pct_1h > 1:
+                votes.append(+1)
+                vote_reasons.append(("buy", f"TM Exchange: BTC surging +{pct_1h:.1f}% in last hour"))
+            elif pct_1h < -1:
+                votes.append(-1)
+                vote_reasons.append(("sell", f"TM Exchange: BTC dropping {pct_1h:.1f}% in last hour"))
 
     # ── Count votes per side ──
     buy_reasons = [reason for vote_side, reason in vote_reasons if vote_side == "buy"]
@@ -712,6 +749,36 @@ async def cancel_trade_order(order_id: str):
         return await truemarkets.cancel_order(order_id)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Cancel failed: {str(e)}")
+
+
+# ─── True Markets MCP Data Ingest ────────────────────────
+# Frontend pushes TM MCP data here. Backend stores and uses it.
+
+_tm_data: dict = {"price": 0, "sentiment": "neutral", "summary": "", "trending": [], "surging": [], "updated": 0}
+
+class TMDataPush(BaseModel):
+    price: float = 0
+    sentiment: str = "neutral"
+    summary: str = ""
+    trending: list = []
+    surging: list = []
+
+@router.post("/tm/push")
+async def push_tm_data(data: TMDataPush):
+    """Frontend pushes True Markets MCP data here."""
+    _tm_data["price"] = data.price
+    _tm_data["sentiment"] = data.sentiment
+    _tm_data["summary"] = data.summary
+    _tm_data["trending"] = data.trending
+    _tm_data["surging"] = data.surging
+    _tm_data["updated"] = time.time()
+    return {"status": "ok", "updated": _tm_data["updated"]}
+
+@router.get("/tm/data")
+async def get_tm_data():
+    """Get latest True Markets data pushed by frontend."""
+    age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else -1
+    return {**_tm_data, "age_seconds": round(age, 1)}
 
 
 # ─── Health ──────────────────────────────────────────────
