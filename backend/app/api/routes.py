@@ -526,16 +526,16 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
     best_down = nearest_down["our_prob"] if nearest_down else 0
 
     # Model ALWAYS votes — it's the core prediction
+    up_t = int(float(nearest_up["threshold"])) if nearest_up else 0
+    down_t = int(float(nearest_down["threshold"])) if nearest_down else 0
+    up_pct = int(best_up * 100)
+    down_pct = int(best_down * 100)
     if best_up > best_down:
         votes.append(+1)
-        up_t = int(float(nearest_up["threshold"])) if nearest_up else 0
-        ratio = best_up / max(best_down, 0.01)
-        vote_reasons.append(("buy", f"Model: {int(best_up*100)}% upside to ${up_t:,} ({ratio:.1f}x more likely than {int(best_down*100)}% downside)"))
+        vote_reasons.append(("buy", f"Model: {up_pct}% chance BTC reaches ${up_t:,} vs {down_pct}% drops to ${down_t:,}"))
     elif best_down > best_up:
         votes.append(-1)
-        down_t = int(float(nearest_down["threshold"])) if nearest_down else 0
-        ratio = best_down / max(best_up, 0.01)
-        vote_reasons.append(("sell", f"Model: {int(best_down*100)}% downside to ${down_t:,} ({ratio:.1f}x more likely than {int(best_up*100)}% upside)"))
+        vote_reasons.append(("sell", f"Model: {down_pct}% chance BTC drops to ${down_t:,} vs {up_pct}% reaches ${up_t:,}"))
 
     # 4. RSI
     if rsi > 70:
@@ -553,12 +553,29 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
         votes.append(-1)
         vote_reasons.append(("sell", f"Sentiment: {sent_text}"))
 
-    # ── Decision: majority vote ──
-    total_votes = sum(votes) if votes else 0
+    # ── Decision: majority vote, model gets 2 votes (it's the core) ──
+    # Recount with model getting double weight
+    model_vote = [v for v, (vs, _) in zip(votes, vote_reasons) if "Model:" in _]
+    other_votes = [v for v, (vs, _) in zip(votes, vote_reasons) if "Model:" not in _]
+    # Model counts double
+    total_votes = sum(model_vote) * 2 + sum(other_votes) if votes else 0
     side = "buy" if total_votes > 0 else "sell" if total_votes < 0 else "buy"
 
-    # Only show reasons that agree
-    reasons = [reason for vote_side, reason in vote_reasons if vote_side == side]
+    # Build reasons: model ALWAYS first, then supporting signals
+    model_dir = "buy" if best_up > best_down else "sell"
+    if model_dir == side:
+        # Model agrees with recommendation
+        if side == "buy":
+            model_line = f"Model predicts {up_pct}% upside to ${up_t:,} vs {down_pct}% downside to ${down_t:,}"
+        else:
+            model_line = f"Model predicts {down_pct}% downside to ${down_t:,} vs {up_pct}% upside to ${up_t:,}"
+    else:
+        # Model disagrees — be transparent
+        model_line = f"Model leans {'up' if model_dir == 'buy' else 'down'} ({up_pct}% to ${up_t:,} / {down_pct}% to ${down_t:,}) but outvoted by market signals"
+
+    supporting = [reason for vote_side, reason in vote_reasons if vote_side == side and "Model:" not in reason]
+    reasons = [model_line] + supporting
+
     if not reasons and vote_reasons:
         reasons = [vote_reasons[0][1]]
 
