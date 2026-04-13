@@ -8,6 +8,7 @@ Combined into a single order flow signal: buy pressure vs sell pressure.
 """
 
 import json
+import numpy as np
 import httpx
 from app.config import POLYMARKET_GAMMA_BASE, TRUEMARKETS_API_BASE, TRUEMARKETS_API_KEY
 
@@ -33,13 +34,15 @@ async def fetch_order_flow(coin: str = "bitcoin", polymarket_markets: list | Non
     else:
         combined = poly_signal  # TM mock data is not meaningful
 
-    if combined > 0.25:
+    # Pressure follows the money — if more volume on one side, that's the pressure
+    # Only call it neutral if volume is truly even (<2% difference)
+    if combined > 0.15:
         pressure = "strong_buy"
-    elif combined > 0.08:
+    elif combined > 0.02:
         pressure = "buy"
-    elif combined < -0.25:
+    elif combined < -0.15:
         pressure = "strong_sell"
-    elif combined < -0.08:
+    elif combined < -0.02:
         pressure = "sell"
     else:
         pressure = "neutral"
@@ -97,15 +100,16 @@ def _analyze_polymarket_flow(markets: list) -> dict:
     liq_ratio = (up_liq - down_liq) / max(total_liq, 1)
 
     # Combined Polymarket flow signal
-    # Volume ratio is the PRIMARY signal — actual money flowing in
-    # Momentum confirms direction. Liquidity and acceleration are minor context.
-    signal = (
-        vol_ratio * 0.50                          # where is the money going (dominant)
-        + momentum_signal * 5 * 0.25              # price movement direction
-        + liq_ratio * 0.10                        # liquidity context (minor)
-        + min(max(vol_accel, -1), 1) * 0.15       # activity level
+    # Volume IS the order flow. If more money flows up, it's buy pressure.
+    # Other signals are minor confirmation only — they cannot flip the direction.
+    base = vol_ratio  # This IS the signal: -1 to +1
+    # Small adjustments from other data (cannot exceed ±0.03 total)
+    adj = (
+        np.clip(momentum_signal * 2, -0.01, 0.01)
+        + np.clip(liq_ratio * 0.1, -0.01, 0.01)
+        + np.clip(min(max(vol_accel, -1), 1) * 0.1, -0.01, 0.01)
     )
-    signal = max(-1, min(1, signal))
+    signal = max(-1, min(1, base + adj))
 
     return {
         "signal": round(signal, 4),

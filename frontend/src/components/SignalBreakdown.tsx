@@ -87,11 +87,13 @@ export default function SignalBreakdown({ sentiment, indicators, weights, orderF
                 {getPressureLabel(of.pressure)}
               </span>
             </div>
-            {/* Buy/Sell pressure bar */}
+            {/* Buy/Sell pressure bar — based on actual volume ratio */}
             <div className="flex h-2 rounded-full overflow-hidden bg-tm-border/50">
               {(() => {
-                const signal = of.combined_signal;
-                const buyWidth = Math.max(0, Math.min(100, 50 + signal * 50));
+                const upVol = details?.up_volume_24h || 0;
+                const downVol = details?.down_volume_24h || 0;
+                const totalVol = upVol + downVol;
+                const buyWidth = totalVol > 0 ? Math.max(5, Math.min(95, (upVol / totalVol) * 100)) : 50;
                 return (
                   <>
                     <div className="bg-tm-green h-full transition-all" style={{ width: `${buyWidth}%` }} />
