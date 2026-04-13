@@ -617,41 +617,27 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
     except Exception:
         quote = {"price": str(round(current_price, 2)), "qty": "1", "total": str(round(current_price, 2))}
 
-    if split:
-        # Signals disagree — return BOTH cases
-        return {
-            "mode": "split",
-            "symbol": symbol,
-            "base_asset": base_asset,
-            "buy_case": {
-                "side": "buy",
-                "reasons": buy_reasons,
-                "vote_count": buy_count,
-            },
-            "sell_case": {
-                "side": "sell",
-                "reasons": sell_reasons,
-                "vote_count": sell_count,
-            },
-            "primary_side": side,
-            "confidence": prediction["confidence"],
-            "based_on_mispricing": strongest is not None,
-            "quote": quote,
-        }
-    else:
-        # Clear consensus — single recommendation
-        return {
-            "mode": "consensus",
-            "side": side,
-            "symbol": symbol,
-            "base_asset": base_asset,
-            "confidence": prediction["confidence"],
-            "reasons": buy_reasons if side == "buy" else sell_reasons,
-            "vote_count": buy_count if side == "buy" else sell_count,
-            "total_signals": total_signals,
-            "based_on_mispricing": strongest is not None,
-            "quote": quote,
-        }
+    # Always show both cases
+    return {
+        "mode": "both",
+        "symbol": symbol,
+        "base_asset": base_asset,
+        "primary_side": side,
+        "buy_case": {
+            "side": "buy",
+            "reasons": buy_reasons if buy_reasons else ["All signals point to sell"],
+            "vote_count": buy_count,
+        },
+        "sell_case": {
+            "side": "sell",
+            "reasons": sell_reasons if sell_reasons else ["All signals point to buy"],
+            "vote_count": sell_count,
+        },
+        "total_signals": total_signals,
+        "confidence": prediction["confidence"],
+        "based_on_mispricing": strongest is not None,
+        "quote": quote,
+    }
 
 
 # ─── Trade (True Markets Gateway API) ───────────────────
