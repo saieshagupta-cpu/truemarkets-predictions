@@ -3,17 +3,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ─── External APIs ────────────────────────────────────────
 FEAR_GREED_BASE = "https://api.alternative.me/fng"
 BLOCKCHAIN_INFO_BASE = "https://api.blockchain.info"
 POLYMARKET_GAMMA_BASE = "https://gamma-api.polymarket.com"
 
-# True Markets API (replaces CoinGecko)
-TRUEMARKETS_API_BASE = os.getenv(
-    "TRUEMARKETS_API_BASE",
-    "https://api.truemarkets.co",
-)
+# ─── True Markets API ─────────────────────────────────────
+TRUEMARKETS_API_BASE = os.getenv("TRUEMARKETS_API_BASE", "https://api.truemarkets.co")
 TRUEMARKETS_KEY_FILE = os.getenv("TRUEMARKETS_KEY_FILE", "")
 
+# ─── Supported Coins ──────────────────────────────────────
 SUPPORTED_COINS = {
     "bitcoin": {
         "symbol": "BTC",
@@ -52,22 +51,9 @@ SUPPORTED_COINS = {
     },
 }
 
+# ─── Model Config ─────────────────────────────────────────
 MODEL_WEIGHTS_DIR = os.path.join(os.path.dirname(__file__), "..", "app", "models", "saved")
+SEQUENCE_LENGTH = 30  # Lookback window (30 periods)
 
-# Ensemble weights (defaults — meta-learner overrides when trained)
-LSTM_WEIGHT = 0.34
-XGBOOST_WEIGHT = 0.33
-SENTIMENT_WEIGHT = 0.33
-
-# Direction prediction
-SEQUENCE_LENGTH = 30         # Daily lookback window (30 days = 1 month context)
-PREDICTION_HORIZON = 1       # Predict 1 period ahead
-ABSTENTION_THRESHOLD = 0.55  # Max sub-model disagreement before abstaining
-MIN_TRAINING_SEQUENCES = 50
-AUGMENTATION_COPIES = 5
-AUGMENTATION_NOISE = 0.002
-
-DATA_REFRESH_HOURS = 6
-LOOKBACK_DAYS = 365
-
+# ─── Frontend ─────────────────────────────────────────────
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")

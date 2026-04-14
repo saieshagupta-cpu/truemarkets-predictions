@@ -7,7 +7,6 @@ True Markets provides: order history with buy/sell side and executed quantities.
 Combined into a single order flow signal: buy pressure vs sell pressure.
 """
 
-import json
 import numpy as np
 import httpx
 from app.config import POLYMARKET_GAMMA_BASE, TRUEMARKETS_API_BASE
