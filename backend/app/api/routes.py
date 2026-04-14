@@ -491,14 +491,26 @@ async def get_mispricing(coin: str = "bitcoin"):
         recommended = {"primary_side": "hold", "confidence": 0, "buy_case": {"reasons": [], "vote_count": 0}, "sell_case": {"reasons": [], "vote_count": 0}, "total_signals": 0}
         tcn_pred = {"direction": "neutral", "probability": 0.5}
 
-    # Override price with single source of truth
+    # Override price with single source of truth + get 24h change
     btc_price = await _get_btc_price()
     current_price = btc_price["price"] if btc_price["price"] > 0 else prediction["current_price"]
+    change_24h_pct = btc_price.get("change_24h", 0)
+    # If change is 0, compute from detailed stats
+    if not change_24h_pct:
+        try:
+            from app.data.truemarkets_mcp import fetch_detailed_btc_stats
+            stats = await fetch_detailed_btc_stats()
+            change_24h_pct = stats.get("change_24h_pct", 0)
+        except Exception:
+            pass
+    change_24h_usd = current_price * change_24h_pct / 100 if change_24h_pct else 0
 
     result = {
         "coin": coin,
         "symbol": cfg["symbol"],
         "current_price": current_price,
+        "change_24h_pct": round(change_24h_pct, 2),
+        "change_24h_usd": round(change_24h_usd, 2),
         "confidence": prediction["confidence"],
         "sentiment_signal": enhanced_sentiment,
         "indicators": enhanced_indicators,

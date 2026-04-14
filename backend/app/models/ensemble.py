@@ -340,22 +340,51 @@ def _build_tcn_features(prices, timestamps=None):
 
 
 def _compute_threshold_probs(current_price, volatility, thresholds, prob_up):
-    daily_vol = max(volatility, 0.005)
+    """
+    Separate threshold probability model (NOT the TCN direction model).
+    Uses log-normal price distribution calibrated on historical BTC volatility.
+    This is compared against Polymarket prices for mispricing detection.
+
+    Model: BTC follows geometric Brownian motion over 30 days.
+    P(reach threshold) = probability that price path touches threshold at any point.
+    Uses reflection principle for barrier hitting probability.
+    """
+    # Convert hourly vol to daily, then to 30-day horizon
+    hourly_vol = max(volatility, 0.003)
+    daily_vol = hourly_vol * np.sqrt(24)
     horizon_vol = daily_vol * np.sqrt(30)
-    bias = (prob_up - 0.5) * 0.1
+
+    # Directional drift from ensemble signal
+    # prob_up > 0.5 means bullish drift, < 0.5 means bearish
+    annual_drift = (prob_up - 0.5) * 0.4  # ±20% annualized max
+    daily_drift = annual_drift / 365
+    horizon_drift = daily_drift * 30
+
     results = {}
     for t in thresholds:
-        pct = (t - current_price) / current_price
+        pct_move = (t - current_price) / current_price
+        direction = "up" if t > current_price else "down"
+
+        # Barrier hitting probability using reflection principle
+        # For a threshold above current price:
+        #   P(max(S_t) >= K) ≈ 2 * P(S_T >= K) for driftless GBM
+        # With drift adjustment
         if t > current_price:
-            z = (pct - bias) / max(horizon_vol, 0.01)
+            z = (pct_move - horizon_drift) / max(horizon_vol, 0.01)
+            # Barrier probability is higher than endpoint probability
             prob = 2 * (1 - _norm_cdf(z))
-            direction = "up"
         else:
-            z = (abs(pct) + bias) / max(horizon_vol, 0.01)
+            z = (abs(pct_move) + horizon_drift) / max(horizon_vol, 0.01)
             prob = 2 * (1 - _norm_cdf(z))
-            direction = "down"
-        results[str(t)] = {"probability": float(np.clip(prob, 0.01, 0.99)), "direction": direction,
-                           "distance_pct": round(pct * 100, 2)}
+
+        # Clamp to reasonable range
+        prob = float(np.clip(prob, 0.01, 0.99))
+
+        results[str(t)] = {
+            "probability": prob,
+            "direction": direction,
+            "distance_pct": round(pct_move * 100, 2),
+        }
     return results
 
 
