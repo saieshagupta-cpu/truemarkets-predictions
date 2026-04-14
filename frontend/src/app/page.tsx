@@ -172,13 +172,13 @@ function PredictionView({
               </p>
               <div className="space-y-1.5 pl-2">
                 <p><span className="text-tm-green font-medium">True Markets Sentiment</span> <span className="text-white">35%</span> &mdash; AI analysis of 30+ news articles via True Markets. Contrarian Fear &amp; Greed (buy when fearful, sell when greedy).</p>
-                <p><span className="text-tm-purple font-medium">BTC Order Flow</span> <span className="text-white">35%</span> &mdash; Buy/sell volume pressure from Polymarket + True Markets order data. Tracks where money is moving.</p>
-                <p><span className="text-tm-blue font-medium">TCN Model</span> <span className="text-white">20%</span> &mdash; Temporal Convolutional Network trained on 3 years of daily BTC. 15 multi-timeframe features (RSI, MACD, momentum, volatility across 1d/5d/20d). Predicts tomorrow&rsquo;s direction.</p>
+                <p><span className="text-tm-purple font-medium">BTC Momentum</span> <span className="text-white">32%</span> &mdash; Pure BTC price momentum and acceleration. Tracks whether buying/selling pressure is increasing or fading.</p>
+                <p><span className="text-tm-blue font-medium">TCN Model</span> <span className="text-white">18%</span> &mdash; Temporal Convolutional Network trained on 3 years of daily BTC. 15 multi-timeframe features. Predicts tomorrow&rsquo;s direction.</p>
                 <p><span className="text-tm-yellow font-medium">Technical</span> <span className="text-white">10%</span> &mdash; RSI mean-reversion (&lt;30 oversold = buy, &gt;70 overbought = sell) + MACD trend confirmation.</p>
+                <p><span className="text-tm-red font-medium">Polymarket</span> <span className="text-white">5%</span> &mdash; Prediction market odds for BTC reaching price targets. Supplementary to the threshold comparison table.</p>
               </div>
               <p>
                 Each signal produces a direction and reason. When signals disagree, both sides are shown.
-                Tested 8 model architectures (TCN, LSTM, CNN, Transformer, WaveNet, GBM, Random Forest, Logistic Regression) &mdash; all converge to ~55% on daily BTC direction over 3 years. The real edge comes from combining the model with live sentiment and order flow.
                 All data from <span className="text-white">True Markets</span>. Refreshes every 30 seconds.
               </p>
             </div>

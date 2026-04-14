@@ -24,9 +24,10 @@ from app.config import SEQUENCE_LENGTH, MODEL_WEIGHTS_DIR
 # Polymarket order flow is the strongest empirical signal
 W_RSI = 0.05
 W_MACD = 0.05
-W_TCN = 0.20
-W_ORDER_FLOW = 0.35  # Polymarket buy/sell pressure
+W_TCN = 0.18
+W_ORDER_FLOW = 0.32  # Pure BTC price momentum + acceleration
 W_SENTIMENT = 0.35   # True Markets AI + Fear & Greed
+# Polymarket = 0.05 (hardcoded in compute_signals, supplementary)
 
 
 class Signal:
@@ -102,24 +103,58 @@ def compute_signals(
     tcn_reason = f"TCN model: {tcn_pct}% probability BTC moves {tcn_dir} tomorrow"
     signals.append(Signal("TCN", tcn_prob, tcn_reason, W_TCN))
 
-    # ── 3. ORDER FLOW — weight 20% ──────────────────────
-    of = order_flow or {}
-    of_signal = of.get("combined_signal", 0)  # -1 to +1
-    of_pressure = of.get("pressure", "neutral")
-    poly_details = of.get("polymarket_flow", {}).get("details", {})
-    up_vol = poly_details.get("up_volume_24h", 0)
-    dn_vol = poly_details.get("down_volume_24h", 0)
+    # ── 3. BTC ORDER FLOW (pure price-derived) — weight 35% ──
+    # Momentum + acceleration from BTC price data (not Polymarket)
+    if len(prices) >= 10:
+        # Short-term momentum (last 4 candles)
+        ret_4 = (prices[-1] - prices[-5]) / prices[-5] if prices[-5] > 0 else 0
+        # Acceleration: is momentum increasing or decreasing?
+        ret_recent = (prices[-1] - prices[-3]) / prices[-3] if prices[-3] > 0 else 0
+        ret_prior = (prices[-3] - prices[-5]) / prices[-5] if prices[-5] > 0 else 0
+        accel = ret_recent - ret_prior
 
-    of_prob = 0.5 + of_signal * 0.25  # scale -1..+1 to 0.25..0.75
-    of_prob = float(np.clip(of_prob, 0.2, 0.8))
+        flow_signal = ret_4 * 8 + accel * 15  # combine momentum + acceleration
+        flow_prob = float(np.clip(0.5 + flow_signal, 0.2, 0.8))
 
-    if of_pressure in ("strong_buy", "buy"):
-        of_reason = f"BTC order flow: buy pressure (${up_vol:,.0f} upside vs ${dn_vol:,.0f} downside)"
-    elif of_pressure in ("strong_sell", "sell"):
-        of_reason = f"BTC order flow: sell pressure (${dn_vol:,.0f} downside vs ${up_vol:,.0f} upside)"
+        if flow_prob > 0.55:
+            flow_reason = f"BTC momentum: price accelerating upward ({ret_4*100:+.1f}% over 4 periods)"
+        elif flow_prob < 0.45:
+            flow_reason = f"BTC momentum: price decelerating / falling ({ret_4*100:+.1f}% over 4 periods)"
+        else:
+            flow_reason = f"BTC momentum: sideways ({ret_4*100:+.1f}% over 4 periods)"
     else:
-        of_reason = f"BTC order flow: neutral (signal={of_signal:.2f})"
-    signals.append(Signal("BTC Flow", of_prob, of_reason, W_ORDER_FLOW))
+        flow_prob = 0.5
+        flow_reason = "BTC momentum: insufficient data"
+    signals.append(Signal("BTC Flow", flow_prob, flow_reason, W_ORDER_FLOW))
+
+    # ── 3b. POLYMARKET (prediction market odds) — informational ──
+    # Polymarket odds show up in the threshold comparison table
+    # and also contribute to the recommendation as a signal
+    poly_bullish = 0
+    poly_bearish = 0
+    poly_reason_parts = []
+    for market in (polymarket_markets or [])[:5]:
+        q = market.get("question", "")
+        yes_p = market.get("yes_price", 0.5)
+        vol = market.get("volume", 0)
+        if vol > 5000:
+            if "reach" in q.lower() and yes_p > 0.5:
+                poly_bullish += 1
+                poly_reason_parts.append(f"{yes_p*100:.0f}% to reach target")
+            elif yes_p < 0.3:
+                poly_bearish += 1
+
+    if poly_bullish > poly_bearish and poly_reason_parts:
+        poly_prob = 0.5 + min(poly_bullish * 0.05, 0.15)
+        poly_reason = f"Polymarket: {', '.join(poly_reason_parts[:2])}"
+    elif poly_bearish > poly_bullish:
+        poly_prob = 0.5 - min(poly_bearish * 0.05, 0.15)
+        poly_reason = f"Polymarket: markets pricing low probability of reaching targets"
+    else:
+        poly_prob = 0.5
+        poly_reason = "Polymarket: no strong directional signal"
+    # Small weight — it's supplementary to the threshold table
+    signals.append(Signal("Polymarket", poly_prob, poly_reason, 0.05))
 
     # ── 4. SENTIMENT (TM AI + Fear & Greed) — weight 10% ─
     fg_value = fear_greed_data.get("current", {}).get("value", 50)
