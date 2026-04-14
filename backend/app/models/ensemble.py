@@ -81,21 +81,25 @@ def compute_signals(
     signals.append(Signal("MACD", macd_prob, macd_reason, W_MACD))
 
     # ── 2. GRU MODEL (PMC11935774) — weight based on backtest ──
-    tcn = DirectionGRUPredictor()
-    tcn_features = _build_tcn_features(prices, price_df.get("timestamp", pd.Series()).values)
+    gru = DirectionGRUPredictor()
+    # Build 6 features matching GRU training
+    import pandas as _pd
+    _n = len(prices)
+    _log_ret = np.concatenate([[0], np.diff(np.log(np.maximum(prices, 1e-10)))])
+    _vol5 = _pd.Series(_log_ret).rolling(5, min_periods=1).std().fillna(0).values
+    _vol20 = _pd.Series(_log_ret).rolling(20, min_periods=1).std().fillna(0).values
+    _delta = _pd.Series(prices).diff()
+    _gain = _delta.where(_delta > 0, 0).rolling(14, min_periods=1).mean()
+    _loss = (-_delta.where(_delta < 0, 0)).rolling(14, min_periods=1).mean()
+    _rsi = (100 - (100 / (1 + _gain / _loss.replace(0, np.nan)))).fillna(50).values / 100
+    _e12 = _pd.Series(prices).ewm(span=12).mean().values
+    _e26 = _pd.Series(prices).ewm(span=26).mean().values
+    _macd_r = (_e12 - _e26) - _pd.Series(_e12 - _e26).ewm(span=9).mean().values
+    _macd_n = _macd_r / np.maximum(_pd.Series(np.abs(_macd_r)).rolling(20, min_periods=1).mean().values, 1)
+    _price_s = (prices - prices.min()) / (prices.max() - prices.min() + 1e-10)
+    gru_features = np.column_stack([_price_s, _log_ret, _vol5, _vol20, _rsi, _macd_n])
 
-    if tcn.trained and tcn.norm_params and len(tcn_features) >= SEQUENCE_LENGTH:
-        means = np.array(tcn.norm_params["means"])
-        stds = np.array(tcn.norm_params["stds"])
-        stds[stds == 0] = 1
-        seq = (tcn_features[-SEQUENCE_LENGTH:] - means) / stds
-        with torch.no_grad():
-            prob = tcn.model(torch.FloatTensor(seq).unsqueeze(0)).item()
-        tcn_prob = float(np.clip(prob, 0.05, 0.95))
-    else:
-        # Heuristic fallback: simple momentum
-        mom = (prices[-1] - prices[max(-6, -len(prices))]) / prices[max(-6, -len(prices))] if len(prices) > 1 else 0
-        tcn_prob = float(np.clip(0.5 + mom * 5, 0.3, 0.7))
+    tcn_prob = gru.predict_direction(gru_features)
 
     tcn_dir = "up" if tcn_prob > 0.5 else "down"
     tcn_pct = int(tcn_prob * 100) if tcn_prob > 0.5 else int((1 - tcn_prob) * 100)
