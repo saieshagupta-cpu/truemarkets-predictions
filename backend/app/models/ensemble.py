@@ -312,7 +312,7 @@ def get_recommendation(
         "sentiment_signal": sentiment_signal,
         "indicators": {
             "rsi": rsi,
-            "macd": float(price_df["macd"].iloc[-1]) if "macd" in price_df.columns else 0,
+            "macd": float(price_df["macd"].iloc[-1] - price_df["macd_signal"].iloc[-1]) if "macd" in price_df.columns and "macd_signal" in price_df.columns else 0,
             "volatility": volatility,
             "fear_greed": fg_value,
         },
