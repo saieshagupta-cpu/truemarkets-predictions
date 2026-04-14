@@ -99,7 +99,7 @@ def compute_signals(
 
     tcn_dir = "up" if tcn_prob > 0.5 else "down"
     tcn_pct = int(tcn_prob * 100) if tcn_prob > 0.5 else int((1 - tcn_prob) * 100)
-    tcn_reason = f"TCN model: {tcn_pct}% probability BTC moves {tcn_dir} in the next 1-3 hours"
+    tcn_reason = f"TCN model: {tcn_pct}% probability BTC moves {tcn_dir} tomorrow"
     signals.append(Signal("TCN", tcn_prob, tcn_reason, W_TCN))
 
     # ── 3. ORDER FLOW — weight 20% ──────────────────────

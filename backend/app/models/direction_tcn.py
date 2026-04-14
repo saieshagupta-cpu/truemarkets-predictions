@@ -94,16 +94,10 @@ class DirectionTCNPredictor:
 
         if os.path.exists(model_path):
             try:
-                # Try larger model first, fall back to smaller
-                for channels, layers in [(48, 4), (32, 3)]:
-                    try:
-                        self.model = DirectionTCN(input_size=10, num_channels=channels, num_layers=layers)
-                        self.model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
-                        self.model.eval()
-                        self.trained = True
-                        break
-                    except Exception:
-                        continue
+                self.model = DirectionTCN(input_size=10, num_channels=48, num_layers=4)
+                self.model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
+                self.model.eval()
+                self.trained = True
             except Exception:
                 self.trained = False
 
