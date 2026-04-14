@@ -409,9 +409,7 @@ async def get_mispricing(coin: str = "bitcoin"):
             "poly_question": poly_info["question"] if poly_info else None,
             "poly_volume": poly_info["volume"] if poly_info else None,
             "model_signals": {
-                "lstm": prediction["model_signals"]["lstm"].get(threshold_str, 0.5),
-                "xgboost": prediction["model_signals"]["xgboost"].get(threshold_str, 0.5),
-                "sentiment": prediction["model_signals"]["sentiment"].get(threshold_str, 0.5),
+                "tcn": prediction.get("model_signals", {}).get("tcn", {}).get(threshold_str, 0.5),
             },
         })
 
