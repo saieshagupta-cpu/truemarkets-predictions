@@ -260,8 +260,33 @@ def get_recommendation(
         "model": "TCN (dilated causal convolution)",
     }
 
-    # Threshold probabilities
+    # Threshold probabilities (30-day model)
     threshold_probs = _compute_threshold_probs(current_price, volatility, thresholds, rec["probability_up"])
+
+    # Add 30-day outlook to buy/sell reasons
+    # Find nearest upside and downside thresholds with meaningful probability
+    best_up = None
+    best_down = None
+    for t_str, info in threshold_probs.items():
+        t = float(t_str)
+        prob = info["probability"]
+        if info["direction"] == "up" and prob > 0.15:
+            if best_up is None or abs(t - current_price) < abs(float(best_up[0]) - current_price):
+                best_up = (t_str, prob)
+        elif info["direction"] == "down" and prob > 0.15:
+            if best_down is None or abs(t - current_price) < abs(float(best_down[0]) - current_price):
+                best_down = (t_str, prob)
+
+    if best_up and best_up[1] > 0.30:
+        rec["buy_case"]["reasons"].append(
+            f"30-day model: {best_up[1]*100:.0f}% probability of reaching ${int(float(best_up[0])):,}"
+        )
+        rec["buy_case"]["vote_count"] += 1
+    if best_down and best_down[1] > 0.30:
+        rec["sell_case"]["reasons"].append(
+            f"30-day model: {best_down[1]*100:.0f}% probability of dropping to ${int(float(best_down[0])):,}"
+        )
+        rec["sell_case"]["vote_count"] += 1
 
     # Sentiment breakdown
     fg_value = fear_greed_data.get("current", {}).get("value", 50)
