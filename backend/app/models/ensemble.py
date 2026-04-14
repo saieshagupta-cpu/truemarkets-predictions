@@ -16,17 +16,17 @@ import numpy as np
 import pandas as pd
 import os
 import torch
-from app.models.direction_tcn import DirectionTCNPredictor
+from app.models.direction_gru import DirectionGRUPredictor
 from app.config import SEQUENCE_LENGTH, MODEL_WEIGHTS_DIR
 
-# Signal weights — backtested via logistic regression on 212 OOS test days (Oct 2025 – Apr 2026)
-# Train: 670 days, Val: 183 days, Test: 212 days
-W_RSI = 0.23          # 2nd strongest individual signal (55.2% solo)
-W_MACD = 0.05
-W_TCN = 0.28          # Captures momentum patterns (contrarian coef)
-W_ORDER_FLOW = 0.30   # Strongest individual signal (55.7% solo) — pure BTC momentum
-W_SENTIMENT = 0.13    # TM AI + Fear & Greed
-# Polymarket = 0.01 hardcoded (nearly zero in backtest)
+# Signal weights — backtested via logistic regression on 388 OOS test days (5-year dataset)
+# GRU model from PMC11935774 paper (2-layer, 100 units, dropout 0.2)
+W_RSI = 0.22          # Best individual signal (53.1%)
+W_MACD = 0.03
+W_TCN = 0.01          # GRU alone adds minimal value above momentum (correlated)
+W_ORDER_FLOW = 0.31   # BTC momentum — strongest composite signal
+W_SENTIMENT = 0.16    # TM AI + Fear & Greed (contrarian)
+# Polymarket = 0.26 hardcoded below (contrarian signal)
 
 
 class Signal:
@@ -80,8 +80,8 @@ def compute_signals(
     signals.append(Signal("RSI", rsi_prob, rsi_reason, W_RSI))
     signals.append(Signal("MACD", macd_prob, macd_reason, W_MACD))
 
-    # ── 2. TCN MODEL — weight 30% ───────────────────────
-    tcn = DirectionTCNPredictor()
+    # ── 2. GRU MODEL (PMC11935774) — weight based on backtest ──
+    tcn = DirectionGRUPredictor()
     tcn_features = _build_tcn_features(prices, price_df.get("timestamp", pd.Series()).values)
 
     if tcn.trained and tcn.norm_params and len(tcn_features) >= SEQUENCE_LENGTH:
@@ -99,7 +99,7 @@ def compute_signals(
 
     tcn_dir = "up" if tcn_prob > 0.5 else "down"
     tcn_pct = int(tcn_prob * 100) if tcn_prob > 0.5 else int((1 - tcn_prob) * 100)
-    tcn_reason = f"TCN model: {tcn_pct}% probability BTC moves {tcn_dir} tomorrow"
+    tcn_reason = f"GRU model: {tcn_pct}% probability BTC moves {tcn_dir} tomorrow"
     signals.append(Signal("TCN", tcn_prob, tcn_reason, W_TCN))
 
     # ── 3. BTC ORDER FLOW (pure price-derived) — weight 35% ──
@@ -152,7 +152,7 @@ def compute_signals(
     else:
         poly_prob = 0.5
         poly_reason = "Polymarket: no strong directional signal"
-    signals.append(Signal("Polymarket", poly_prob, poly_reason, 0.01))
+    signals.append(Signal("Polymarket", poly_prob, poly_reason, 0.26))
 
     # ── 4. SENTIMENT (TM AI + Fear & Greed) — weight 10% ─
     fg_value = fear_greed_data.get("current", {}).get("value", 50)

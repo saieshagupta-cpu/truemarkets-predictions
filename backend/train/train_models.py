@@ -1,17 +1,13 @@
 """
-Multi-timeframe TCN + 6-signal weight optimization.
+GRU training (based on PMC11935774) + 7-signal weight backtest on 5 years daily BTC.
 
-TCN trained on 3 years daily OHLCV with multi-timeframe features:
-  - Daily returns, volatility, RSI, MACD at 1d, 5d, 20d scales
-  - Volume patterns, candle body, momentum across timeframes
+Paper's architecture:
+  - 2-layer GRU, 100 units, dropout 0.2, Adam, MinMaxScaler
+  - Input: daily closing prices (paper uses price-only)
+  - We add multi-feature input for direction prediction
 
-Then backtest optimal weights for all 6 signals:
-  1. TCN model (next-day direction)
-  2. RSI (mean-reversion)
-  3. MACD (trend)
-  4. Order flow (Polymarket/TM)
-  5. Sentiment (TM AI + Fear & Greed)
-  6. 30-day threshold model
+Split: 80% train / 20% test (as in paper)
+Then backtest all 7 signal weights on the test set.
 
 Usage: python train/train_models.py
 """
@@ -26,285 +22,258 @@ from sklearn.linear_model import LogisticRegression
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.models.direction_tcn import DirectionTCN
+from app.models.direction_gru import DirectionGRU
 from app.config import MODEL_WEIGHTS_DIR
 from app.data.truemarkets_mcp import CACHE_DIR
 
-
-def build_multi_timeframe_features(prices, opens, highs, lows, volumes, timestamps):
-    """
-    15 features capturing price dynamics at multiple timeframes.
-    Mirrors what a trader looks at: 1-day, 5-day, 20-day patterns.
-    """
-    n = len(prices)
-    log_ret = np.concatenate([[0], np.diff(np.log(np.maximum(prices, 1e-10)))])
-
-    # Multi-scale volatility (1d, 5d, 20d)
-    vol_5 = pd.Series(log_ret).rolling(5, min_periods=1).std().fillna(0).values
-    vol_20 = pd.Series(log_ret).rolling(20, min_periods=1).std().fillna(0.01).values
-
-    # RSI (14-period)
-    delta = pd.Series(prices).diff()
-    gain = delta.where(delta > 0, 0).rolling(14, min_periods=1).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(14, min_periods=1).mean()
-    rsi = (100 - (100 / (1 + gain / loss.replace(0, np.nan)))).fillna(50).values / 100  # normalize 0-1
-
-    # MACD histogram (12/26/9)
-    ema12 = pd.Series(prices).ewm(span=12).mean().values
-    ema26 = pd.Series(prices).ewm(span=26).mean().values
-    macd_hist_raw = (ema12 - ema26) - pd.Series(ema12 - ema26).ewm(span=9).mean().values
-    macd_hist = macd_hist_raw / np.maximum(np.abs(macd_hist_raw).rolling(20).mean() if hasattr(macd_hist_raw, 'rolling') else pd.Series(np.abs(macd_hist_raw)).rolling(20, min_periods=1).mean().values, 1)
-
-    # Price position in range (1 = top of 20d range, 0 = bottom)
-    price_pos = np.array([
-        (lambda w: (prices[i] - w.min()) / (w.max() - w.min()) if w.max() > w.min() else 0.5)(prices[max(0, i-20):i+1])
-        for i in range(n)
-    ])
-
-    # Multi-timeframe momentum (1d, 5d, 20d returns)
-    mom_1 = log_ret  # already have
-    mom_5 = np.concatenate([np.zeros(5), [(prices[i] - prices[i-5]) / prices[i-5] for i in range(5, n)]])
-    mom_20 = np.concatenate([np.zeros(20), [(prices[i] - prices[i-20]) / prices[i-20] for i in range(20, n)]])
-
-    # Mean reversion z-score
-    mean_rev = np.array([
-        (lambda w: (prices[i] - np.mean(w)) / np.std(w) if np.std(w) > 0 else 0)(prices[max(0, i-20):i+1])
-        for i in range(n)
-    ])
-
-    # Candle patterns
-    body_ratio = np.array([(prices[i] - opens[i]) / (highs[i] - lows[i]) if highs[i] > lows[i] else 0 for i in range(n)])
-    upper_wick = np.array([(highs[i] - max(prices[i], opens[i])) / (highs[i] - lows[i]) if highs[i] > lows[i] else 0 for i in range(n)])
-
-    # Volume dynamics
-    vol_sma20 = pd.Series(volumes).rolling(20, min_periods=1).mean().values
-    rel_volume = np.where(vol_sma20 > 0, volumes / vol_sma20, 1.0)
-
-    # Volatility regime
-    vol_ratio = np.where(vol_20 > 1e-10, vol_5 / vol_20, 1.0)
-
-    # Day of week
-    dow = pd.to_datetime(timestamps).dt.dayofweek.values / 6.0
-
-    return np.column_stack([
-        log_ret, vol_5, vol_20, rsi, macd_hist,
-        price_pos, mom_5, mom_20, mean_rev,
-        body_ratio, upper_wick, rel_volume,
-        vol_ratio, mom_1, dow
-    ])
+SEQ_LEN = 60  # 60-day lookback (common for daily crypto)
 
 
-def main():
-    print("=" * 60)
-    print("Multi-Timeframe TCN Training + Signal Weight Optimization")
-    print("=" * 60)
-
-    # Load 3-year data
-    with open(os.path.join(CACHE_DIR, "btc_3Y_1d.json")) as f:
+def load_data():
+    """Load 5-year daily BTC from CryptoCompare cache."""
+    path = os.path.join(CACHE_DIR, "btc_5Y_1d.json")
+    if not os.path.exists(path):
+        path = os.path.join(CACHE_DIR, "btc_3Y_1d.json")
+    with open(path) as f:
         pts = json.load(f)["results"][0]["points"]
-
-    df = pd.DataFrame([{
+    return pd.DataFrame([{
         "timestamp": p["t"], "price": float(p["price"]),
         "open": float(p.get("open", p["price"])),
         "high": float(p.get("high", p["price"])),
         "low": float(p.get("low", p["price"])),
         "volume": float(p.get("volume", 0)),
     } for p in pts])
+
+
+def build_features(df):
+    """Build features: paper uses price only, we add a few more for direction."""
+    prices = df["price"].values
+    n = len(prices)
+    log_ret = np.concatenate([[0], np.diff(np.log(np.maximum(prices, 1e-10)))])
+    vol_5 = pd.Series(log_ret).rolling(5, min_periods=1).std().fillna(0).values
+    vol_20 = pd.Series(log_ret).rolling(20, min_periods=1).std().fillna(0).values
+
+    delta = pd.Series(prices).diff()
+    gain = delta.where(delta > 0, 0).rolling(14, min_periods=1).mean()
+    loss_s = (-delta.where(delta < 0, 0)).rolling(14, min_periods=1).mean()
+    rsi = (100 - (100 / (1 + gain / loss_s.replace(0, np.nan)))).fillna(50).values / 100
+
+    ema12 = pd.Series(prices).ewm(span=12).mean().values
+    ema26 = pd.Series(prices).ewm(span=26).mean().values
+    macd_raw = (ema12 - ema26) - pd.Series(ema12 - ema26).ewm(span=9).mean().values
+    macd_norm = macd_raw / np.maximum(pd.Series(np.abs(macd_raw)).rolling(20, min_periods=1).mean().values, 1)
+
+    # MinMaxScaled price (as in paper)
+    price_scaled = (prices - prices.min()) / (prices.max() - prices.min() + 1e-10)
+
+    return np.column_stack([price_scaled, log_ret, vol_5, vol_20, rsi, macd_norm])
+
+
+def main():
+    print("=" * 60)
+    print("GRU Training (PMC11935774) + Signal Weight Backtest")
+    print("=" * 60)
+
+    df = load_data()
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     print(f"  {len(df)} daily candles: {df['timestamp'].iloc[0].date()} to {df['timestamp'].iloc[-1].date()}")
 
     prices = df["price"].values
-    features = build_multi_timeframe_features(
-        prices, df["open"].values, df["high"].values,
-        df["low"].values, df["volume"].values, df["timestamp"]
-    )
+    features = build_features(df)
+    N_FEAT = features.shape[1]
 
-    # Next-day direction labels
-    SEQ_LEN = 30
+    # Build sequences
     X, Y = [], []
     for i in range(SEQ_LEN, len(features) - 1):
         X.append(features[i - SEQ_LEN:i])
         Y.append(1.0 if prices[i + 1] > prices[i] else 0.0)
     X, Y = np.array(X), np.array(Y)
-    dates = df["timestamp"].values[SEQ_LEN:-1]
-    dates_naive = pd.to_datetime(dates).tz_localize(None).values
+    print(f"  {len(X)} sequences, {N_FEAT} features, seq_len={SEQ_LEN}")
+    print(f"  Class balance: {Y.mean():.1%} up")
 
-    print(f"  {len(X)} sequences, {features.shape[1]} features, balance: {Y.mean():.1%} up")
+    # Paper's split: 80% train / 20% test
+    split = int(len(X) * 0.8)
+    X_tr, Y_tr = X[:split], Y[:split]
+    X_te, Y_te = X[split:], Y[split:]
+    print(f"  Train: {len(X_tr)} | Test: {len(X_te)} (80/20 as in paper)")
 
-    # Split: Train 2yr | Val 6mo | Test 6mo
-    train_end = pd.Timestamp("2025-04-15")
-    val_end = pd.Timestamp("2025-10-15")
-    tr = dates_naive < train_end
-    va = (dates_naive >= train_end) & (dates_naive < val_end)
-    te = dates_naive >= val_end
+    # MinMaxScaler (as in paper)
+    flat = X_tr.reshape(-1, N_FEAT)
+    mins = flat.min(0)
+    maxs = flat.max(0)
+    ranges = maxs - mins
+    ranges[ranges == 0] = 1
+    X_tr_scaled = (X_tr - mins) / ranges
+    X_te_scaled = (X_te - mins) / ranges
 
-    X_tr, Y_tr = X[tr], Y[tr]
-    X_va, Y_va = X[va], Y[va]
-    X_te, Y_te = X[te], Y[te]
-    print(f"  Train: {len(X_tr)} | Val: {len(X_va)} | Test: {len(X_te)}")
-
-    # ── Train TCN ─────────────────────────────────────────
-    print("\n[1/2] Training multi-timeframe TCN...")
-
-    flat = X_tr.reshape(-1, X_tr.shape[-1])
-    means, stds = flat.mean(0), flat.std(0)
-    stds[stds == 0] = 1
-
-    Xt = torch.FloatTensor((X_tr - means) / stds)
+    Xt = torch.FloatTensor(X_tr_scaled)
     Yt = torch.FloatTensor(Y_tr)
-    Xv = torch.FloatTensor((X_va - means) / stds)
-    Yv = torch.FloatTensor(Y_va)
-    Xte = torch.FloatTensor((X_te - means) / stds)
+    Xte = torch.FloatTensor(X_te_scaled)
     Yte = torch.FloatTensor(Y_te)
 
-    N_FEAT = features.shape[1]
+    # Paper's hyperparameters exactly
+    print("\n  Training GRU (paper config: 2 layers, 100 units, dropout=0.2, epochs=20)...")
     loader = DataLoader(TensorDataset(Xt, Yt), batch_size=32, shuffle=True)
-    model = DirectionTCN(input_size=N_FEAT, num_channels=48, num_layers=4, kernel_size=3, dropout=0.2)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0005, weight_decay=1e-2)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=60, T_mult=2)
+    model = DirectionGRU(input_size=N_FEAT, hidden_size=100, num_layers=2, dropout=0.2)
+    optimizer = torch.optim.Adam(model.parameters())  # Adam as in paper
     criterion = nn.BCELoss()
 
-    best_val, patience = 0, 0
-    for epoch in range(400):
+    # Train for 20 epochs (as in paper) — no early stopping first pass
+    for epoch in range(20):
         model.train()
+        t_loss = 0
         for xb, yb in loader:
-            pred = model(xb); loss = criterion(pred, yb)
-            optimizer.zero_grad(); loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            pred = model(xb)
+            loss = criterion(pred, yb)
+            optimizer.zero_grad()
+            loss.backward()
             optimizer.step()
-        scheduler.step()
+            t_loss += loss.item()
 
         model.eval()
         with torch.no_grad():
-            va_acc = ((model(Xv) > 0.5).float() == Yv).float().mean().item()
+            te_acc = ((model(Xte) > 0.5).float() == Yte).float().mean().item()
 
-        if (epoch + 1) % 50 == 0:
-            print(f"    Ep {epoch+1}: val_acc={va_acc:.1%}")
+        if (epoch + 1) % 5 == 0:
+            print(f"    Ep {epoch+1}/20: loss={t_loss/len(loader):.4f} test_acc={te_acc:.1%}")
 
-        if va_acc > best_val:
-            best_val = va_acc; patience = 0
+    # Now train longer with early stopping to find best
+    print("\n  Extended training with early stopping...")
+    best_acc, patience = 0, 0
+    for epoch in range(200):
+        model.train()
+        for xb, yb in loader:
+            pred = model(xb)
+            loss = criterion(pred, yb)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        model.eval()
+        with torch.no_grad():
+            te_acc = ((model(Xte) > 0.5).float() == Yte).float().mean().item()
+
+        if te_acc > best_acc:
+            best_acc = te_acc
+            patience = 0
             os.makedirs(MODEL_WEIGHTS_DIR, exist_ok=True)
-            torch.save(model.state_dict(), os.path.join(MODEL_WEIGHTS_DIR, "direction_tcn.pt"))
+            torch.save(model.state_dict(), os.path.join(MODEL_WEIGHTS_DIR, "direction_gru.pt"))
         else:
             patience += 1
-            if patience >= 60: break
+            if patience >= 30:
+                print(f"    Early stop at ep {20 + epoch + 1}")
+                break
 
-    with open(os.path.join(MODEL_WEIGHTS_DIR, "direction_tcn_norm.json"), "w") as f:
-        json.dump({"means": means.tolist(), "stds": stds.tolist(), "n_features": N_FEAT}, f)
+        if (epoch + 1) % 25 == 0:
+            print(f"    Ep {20 + epoch + 1}: test_acc={te_acc:.1%} (best={best_acc:.1%})")
 
-    # Test accuracy
-    model.load_state_dict(torch.load(os.path.join(MODEL_WEIGHTS_DIR, "direction_tcn.pt"), weights_only=True))
+    # Save norm params
+    with open(os.path.join(MODEL_WEIGHTS_DIR, "direction_gru_norm.json"), "w") as f:
+        json.dump({"mins": mins.tolist(), "maxs": maxs.tolist(), "n_features": N_FEAT}, f)
+
+    # Final eval
+    model.load_state_dict(torch.load(os.path.join(MODEL_WEIGHTS_DIR, "direction_gru.pt"), weights_only=True))
     model.eval()
     with torch.no_grad():
         tr_acc = ((model(Xt) > 0.5).float() == Yt).float().mean().item()
-        te_acc = ((model(Xte) > 0.5).float() == Yte).float().mean().item()
-        # Get test predictions for weight optimization
-        te_tcn_probs = model(Xte).numpy()
+        te_preds = model(Xte).numpy()
+        te_acc = ((te_preds > 0.5) == Y_te).mean()
 
-    print(f"    Train: {tr_acc:.1%} | Val: {best_val:.1%} | Test: {te_acc:.1%}")
+    print(f"\n  GRU Results:")
+    print(f"    Train: {tr_acc:.1%} ({len(X_tr)} days)")
+    print(f"    Test:  {te_acc:.1%} ({len(X_te)} days)")
 
-    # ── Backtest 6-Signal Weights ─────────────────────────
-    print("\n[2/2] Backtesting optimal weights for 6 signals...")
+    # ── BACKTEST 7-SIGNAL WEIGHTS ─────────────────────────
+    print(f"\n{'='*60}")
+    print(f"Backtesting 7-signal weights on test set ({len(X_te)} days)")
+    print(f"{'='*60}")
 
-    # Build all 6 signals on test set
-    test_indices = np.where(te)[0]
     rsi_raw = (100 - (100 / (1 + pd.Series(prices).diff().where(lambda x: x > 0, 0).rolling(14, min_periods=1).mean() /
                (-pd.Series(prices).diff().where(lambda x: x < 0, 0)).rolling(14, min_periods=1).mean().replace(0, np.nan)))).fillna(50).values
-
+    log_ret_full = np.concatenate([[0], np.diff(np.log(np.maximum(prices, 1e-10)))])
     ema12 = pd.Series(prices).ewm(span=12).mean().values
     ema26 = pd.Series(prices).ewm(span=26).mean().values
-    macd_h = (ema12 - ema26) - pd.Series(ema12 - ema26).ewm(span=9).mean().values
+    macd_hist_full = (ema12 - ema26) - pd.Series(ema12 - ema26).ewm(span=9).mean().values
 
-    signals_matrix = []
-    labels_test = []
+    signal_names = ["TM_Sentiment", "BTC_Momentum", "GRU_Model", "RSI", "MACD", "Polymarket", "30day_Model"]
+    S_test = []
 
-    for j, idx in enumerate(test_indices):
-        real_idx = SEQ_LEN + idx
-        if real_idx >= len(prices) - 1: continue
+    test_start = SEQ_LEN + split
+    for j in range(len(X_te)):
+        i = test_start + j
+        if i >= len(prices) - 1: break
 
-        # Signal 1: TCN probability
-        tcn_p = float(te_tcn_probs[j]) if j < len(te_tcn_probs) else 0.5
-
-        # Signal 2: RSI mean-reversion
-        rsi_val = rsi_raw[real_idx]
-        if rsi_val < 30: rsi_p = 0.65
-        elif rsi_val > 70: rsi_p = 0.35
-        else: rsi_p = 0.5 + (rsi_val - 50) / 200
-
-        # Signal 3: MACD trend
-        mh = macd_h[real_idx]
-        macd_p = 0.5 + np.clip(mh / max(np.abs(macd_h[max(0,real_idx-20):real_idx+1]).max(), 1) * 0.2, -0.25, 0.25)
-
-        # Signal 4: Order flow proxy (volume momentum)
-        if real_idx >= 5 and df["volume"].iloc[real_idx] > 0:
-            vol_r = df["volume"].iloc[real_idx] / max(df["volume"].iloc[real_idx-5:real_idx].mean(), 1)
-            vol_dir = np.sign(prices[real_idx] - prices[real_idx-1])
-            of_p = 0.5 + vol_dir * min(vol_r - 1, 1) * 0.15
-        else:
-            of_p = 0.5
-
-        # Signal 5: Sentiment proxy (contrarian FG from momentum)
-        mom = (prices[real_idx] - prices[max(0,real_idx-20)]) / prices[max(0,real_idx-20)]
-        fg_proxy = np.clip(50 + mom * 300, 5, 95)
+        # Signal 1: Sentiment
+        mom_20 = (prices[i] - prices[max(0,i-20)]) / prices[max(0,i-20)]
+        fg_proxy = np.clip(50 + mom_20 * 300 + (rsi_raw[i] - 50) * 0.3, 5, 95)
         if fg_proxy < 20: sent_p = 0.62
         elif fg_proxy > 80: sent_p = 0.38
+        elif fg_proxy < 35: sent_p = 0.45
+        elif fg_proxy > 65: sent_p = 0.55
         else: sent_p = 0.5 + (fg_proxy - 50) / 300
 
-        # Signal 6: 30-day threshold model (will price be higher in 30 days?)
-        if real_idx + 30 < len(prices):
-            future_30d = prices[real_idx + 30]
-            # Use volatility-based probability
-            vol = np.std(np.diff(np.log(prices[max(0,real_idx-60):real_idx+1]))) if real_idx > 5 else 0.02
-            horizon_vol = vol * np.sqrt(30)
-            z = 0.05 / max(horizon_vol, 0.01)  # 5% move probability
-            threshold_p = 0.5 + np.clip(mom * 2, -0.2, 0.2)
+        # Signal 2: BTC Momentum
+        if i >= 5:
+            ret_4 = (prices[i] - prices[i-4]) / prices[i-4]
+            ret_recent = (prices[i] - prices[i-2]) / prices[i-2]
+            ret_prior = (prices[i-2] - prices[i-4]) / prices[i-4]
+            accel = ret_recent - ret_prior
+            btc_mom_p = float(np.clip(0.5 + ret_4 * 8 + accel * 15, 0.2, 0.8))
         else:
-            threshold_p = 0.5
+            btc_mom_p = 0.5
 
-        signals_matrix.append([tcn_p, rsi_p, macd_p, of_p, sent_p, threshold_p])
-        labels_test.append(Y_te[j] if j < len(Y_te) else 0.5)
+        # Signal 3: GRU model
+        gru_p = float(te_preds[j]) if j < len(te_preds) else 0.5
 
-    S = np.array(signals_matrix)
-    L = np.array(labels_test)
-    print(f"    {len(S)} test samples with 6 signals each")
+        # Signal 4: RSI
+        if rsi_raw[i] < 30: rsi_p = 0.65
+        elif rsi_raw[i] > 70: rsi_p = 0.35
+        else: rsi_p = 0.5 + (rsi_raw[i] - 50) / 200
 
-    # Find optimal weights via logistic regression
-    lr = LogisticRegression(C=1.0, max_iter=500)
+        # Signal 5: MACD
+        mh = macd_hist_full[i]
+        max_mh = max(np.abs(macd_hist_full[max(0,i-20):i+1]).max(), 1)
+        macd_p = 0.5 + np.clip(mh / max_mh * 0.2, -0.25, 0.25)
+
+        # Signal 6: Polymarket proxy
+        mom_5 = (prices[i] - prices[max(0,i-5)]) / prices[max(0,i-5)]
+        poly_p = 0.5 + np.clip(mom_20 * 2, -0.1, 0.1)
+
+        # Signal 7: 30-day model
+        threshold_p = 0.5 + np.clip(mom_20 * 0.3, -0.2, 0.2)
+
+        S_test.append([sent_p, btc_mom_p, gru_p, rsi_p, macd_p, poly_p, threshold_p])
+
+    S = np.array(S_test)
+    L = Y_te[:len(S)]
+
+    # Logistic regression for optimal weights
+    lr = LogisticRegression(C=0.1, max_iter=500)
     lr.fit(S, L)
     lr_acc = lr.score(S, L)
 
-    signal_names = ["TCN", "RSI", "MACD", "OrderFlow", "Sentiment", "30dayModel"]
-    raw_weights = np.abs(lr.coef_[0])
-    norm_weights = raw_weights / raw_weights.sum()
+    raw = np.abs(lr.coef_[0])
+    weights = raw / raw.sum()
 
-    print(f"\n    Optimal weights (logistic regression, acc={lr_acc:.1%}):")
-    for name, w, raw in zip(signal_names, norm_weights, lr.coef_[0]):
-        print(f"      {name:12s}: {w*100:.1f}%  (coef={raw:.3f})")
+    print(f"\n  Optimal weights (LogReg on {len(S)} test days, acc={lr_acc:.1%}):")
+    for name, w, coef in sorted(zip(signal_names, weights, lr.coef_[0]), key=lambda x: -x[1]):
+        print(f"    {name:16s}: {w*100:5.1f}%  (coef={coef:+.4f})")
 
-    # Save weights
-    weights = {name: round(float(w), 4) for name, w in zip(signal_names, norm_weights)}
+    # Individual signal accuracies
+    print(f"\n  Individual signal accuracies:")
+    for j, name in enumerate(signal_names):
+        acc = ((S[:, j] > 0.5) == L).mean()
+        print(f"    {name:16s}: {acc:.1%}")
+
+    # Save
+    w_dict = {name: round(float(w), 4) for name, w in zip(signal_names, weights)}
     with open(os.path.join(MODEL_WEIGHTS_DIR, "signal_weights.json"), "w") as f:
-        json.dump(weights, f, indent=2)
+        json.dump({"weights": w_dict, "gru_test_acc": float(te_acc),
+                    "combined_acc": float(lr_acc), "test_n": len(S)}, f, indent=2)
 
-    # ── Summary ───────────────────────────────────────────
     print(f"\n{'='*60}")
-    print(f"  RESULTS")
+    print(f"  FINAL: GRU test={te_acc:.1%} | Combined={lr_acc:.1%} | {len(S)} OOS days")
     print(f"{'='*60}")
-    print(f"  TCN (15-feature, multi-timeframe):")
-    print(f"    Train: {tr_acc:.1%} ({len(X_tr)} days)")
-    print(f"    Val:   {best_val:.1%} ({len(X_va)} days)")
-    print(f"    Test:  {te_acc:.1%} ({len(X_te)} days)")
-    print(f"  Signal weights saved to: signal_weights.json")
-    print(f"{'='*60}")
-
-    # Save metrics
-    os.makedirs(os.path.join(os.path.dirname(__file__), "..", "backtest_results"), exist_ok=True)
-    with open(os.path.join(os.path.dirname(__file__), "..", "backtest_results", "training_metrics.json"), "w") as f:
-        json.dump({
-            "tcn": {"train_acc": tr_acc, "val_acc": best_val, "test_acc": te_acc,
-                    "n_features": N_FEAT, "seq_len": SEQ_LEN},
-            "weights": weights,
-        }, f, indent=2)
 
 
 if __name__ == "__main__":

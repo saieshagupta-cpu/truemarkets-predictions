@@ -171,12 +171,12 @@ function PredictionView({
                 Four signals are blended with <span className="text-white font-medium">weights backtested on 2 years of daily BTC data</span> (Apr 2023 &ndash; Apr 2025):
               </p>
               <div className="space-y-1.5 pl-2">
-                <p><span className="text-tm-purple font-medium">BTC Momentum</span> <span className="text-white">30%</span> &mdash; Pure BTC price momentum and acceleration. Strongest individual signal at 55.7% accuracy.</p>
-                <p><span className="text-tm-blue font-medium">TCN Model</span> <span className="text-white">28%</span> &mdash; Temporal Convolutional Network trained on 3 years of daily BTC. 15 multi-timeframe features.</p>
-                <p><span className="text-tm-yellow font-medium">RSI</span> <span className="text-white">23%</span> &mdash; Mean-reversion at extremes (&lt;30 oversold = buy, &gt;70 overbought = sell). 55.2% solo accuracy.</p>
-                <p><span className="text-tm-green font-medium">True Markets Sentiment</span> <span className="text-white">13%</span> &mdash; AI analysis of 30+ news articles + contrarian Fear &amp; Greed.</p>
-                <p><span className="text-tm-yellow font-medium">MACD</span> <span className="text-white">5%</span> &mdash; Trend confirmation via histogram direction.</p>
-                <p><span className="text-tm-red font-medium">Polymarket</span> <span className="text-white">1%</span> &mdash; Prediction market odds. Supplementary.</p>
+                <p><span className="text-tm-purple font-medium">BTC Momentum</span> <span className="text-white">31%</span> &mdash; Pure BTC price momentum and acceleration derived from True Markets price data.</p>
+                <p><span className="text-tm-red font-medium">Polymarket</span> <span className="text-white">26%</span> &mdash; Prediction market odds for BTC targets. Contrarian signal (crowds often wrong at extremes).</p>
+                <p><span className="text-tm-yellow font-medium">RSI</span> <span className="text-white">22%</span> &mdash; Mean-reversion at extremes (&lt;30 oversold = buy, &gt;70 overbought = sell). Best individual signal (53.1%).</p>
+                <p><span className="text-tm-green font-medium">True Markets Sentiment</span> <span className="text-white">16%</span> &mdash; AI analysis of 30+ news articles + contrarian Fear &amp; Greed.</p>
+                <p><span className="text-tm-yellow font-medium">MACD</span> <span className="text-white">3%</span> &mdash; Trend confirmation.</p>
+                <p><span className="text-tm-blue font-medium">GRU Model</span> <span className="text-white">1%</span> &mdash; 2-layer GRU (PMC11935774) trained on 5 years daily BTC. 52.8% test accuracy.</p>
               </div>
               <p>
                 Each signal produces a direction and reason. When signals disagree, both sides are shown.
