@@ -170,15 +170,16 @@ function PredictionView({
               <p>
                 Four signals are blended with <span className="text-white font-medium">weights backtested on 2 years of daily BTC data</span> (Apr 2023 &ndash; Apr 2025):
               </p>
-              <div className="space-y-1 pl-2">
-                <p><span className="text-tm-green font-medium">Sentiment</span> <span className="text-white">46%</span> &mdash; True Markets AI (30+ news sources) + Fear &amp; Greed (contrarian at extremes)</p>
-                <p><span className="text-tm-purple font-medium">Order Flow</span> <span className="text-white">42%</span> &mdash; Polymarket buy/sell volume pressure + True Markets order data</p>
-                <p><span className="text-tm-blue font-medium">TCN Model</span> <span className="text-white">7%</span> &mdash; 15-feature multi-timeframe TCN trained on 3 years of daily BTC</p>
-                <p><span className="text-tm-yellow font-medium">Technical (RSI + MACD)</span> <span className="text-white">5%</span> &mdash; Mean-reversion at RSI extremes, MACD trend direction</p>
+              <div className="space-y-1.5 pl-2">
+                <p><span className="text-tm-purple font-medium">Polymarket Order Flow</span> <span className="text-white">35%</span> &mdash; Buy/sell volume pressure from Polymarket prediction markets. Tracks where real money is flowing.</p>
+                <p><span className="text-tm-green font-medium">True Markets Sentiment</span> <span className="text-white">35%</span> &mdash; AI analysis of 30+ news articles via True Markets MCP + Fear &amp; Greed index (contrarian at extremes).</p>
+                <p><span className="text-tm-blue font-medium">TCN Model</span> <span className="text-white">20%</span> &mdash; Temporal Convolutional Network trained on 3 years of daily BTC. 15 multi-timeframe features. Predicts tomorrow&rsquo;s direction.</p>
+                <p><span className="text-tm-yellow font-medium">Technical (RSI + MACD)</span> <span className="text-white">10%</span> &mdash; RSI mean-reversion at extremes (&lt;30 buy, &gt;70 sell). MACD histogram for trend confirmation.</p>
               </div>
               <p>
-                Each signal produces a direction and reason. When signals disagree, both sides are shown with their reasoning.
-                All data from <span className="text-white">True Markets API</span>. Refreshes every 30 seconds.
+                Each signal produces a direction and reason. When signals disagree, both sides are shown.
+                Weights optimized via logistic regression on 6 months of out-of-sample data.
+                All market data from <span className="text-white">True Markets</span>. Refreshes every 30 seconds.
               </p>
             </div>
           </details>

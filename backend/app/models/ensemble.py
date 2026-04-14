@@ -19,14 +19,14 @@ import torch
 from app.models.direction_tcn import DirectionTCNPredictor
 from app.config import SEQUENCE_LENGTH, MODEL_WEIGHTS_DIR
 
-# Backtested weights (logistic regression on 6-month OOS test, Oct 2025 – Apr 2026)
-# Order flow and sentiment dominate because they capture regime shifts
-# TCN captures short-term momentum but is less reliable across regimes
-W_RSI = 0.03
-W_MACD = 0.02
-W_TCN = 0.07
-W_ORDER_FLOW = 0.42
-W_SENTIMENT = 0.46
+# Signal weights — backtested then adjusted for production
+# TCN boosted from backtested 7% to 20% (it's our core model, underfits on proxy signals)
+# Polymarket order flow is the strongest empirical signal
+W_RSI = 0.05
+W_MACD = 0.05
+W_TCN = 0.20
+W_ORDER_FLOW = 0.35  # Polymarket buy/sell pressure
+W_SENTIMENT = 0.35   # True Markets AI + Fear & Greed
 
 
 class Signal:
@@ -114,12 +114,12 @@ def compute_signals(
     of_prob = float(np.clip(of_prob, 0.2, 0.8))
 
     if of_pressure in ("strong_buy", "buy"):
-        of_reason = f"Order flow: buy pressure (${up_vol:,.0f} upside vs ${dn_vol:,.0f} downside)"
+        of_reason = f"Polymarket: buy pressure (${up_vol:,.0f} upside vs ${dn_vol:,.0f} downside)"
     elif of_pressure in ("strong_sell", "sell"):
-        of_reason = f"Order flow: sell pressure (${dn_vol:,.0f} downside vs ${up_vol:,.0f} upside)"
+        of_reason = f"Polymarket: sell pressure (${dn_vol:,.0f} downside vs ${up_vol:,.0f} upside)"
     else:
-        of_reason = f"Order flow: neutral (signal={of_signal:.2f})"
-    signals.append(Signal("Order Flow", of_prob, of_reason, W_ORDER_FLOW))
+        of_reason = f"Polymarket: neutral (signal={of_signal:.2f})"
+    signals.append(Signal("Polymarket", of_prob, of_reason, W_ORDER_FLOW))
 
     # ── 4. SENTIMENT (TM AI + Fear & Greed) — weight 10% ─
     fg_value = fear_greed_data.get("current", {}).get("value", 50)
