@@ -3,7 +3,7 @@ import asyncio
 import time
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.models.ensemble import EnsemblePredictionEngine, RecommendationEngine
+from app.models.ensemble import EnsemblePredictionEngine, get_recommendation
 from app.data.truemarkets_mcp import fetch_current_price, fetch_historical_prices
 from app.data.fear_greed import fetch_fear_greed
 from app.data.onchain import fetch_onchain_metrics
@@ -66,7 +66,7 @@ async def get_predictions(coin: str = "bitcoin"):
 
     try:
         historical, sentiment, fear_greed, onchain = await asyncio.gather(
-            fetch_historical_prices(cfg["symbol"], days=30),
+            fetch_historical_prices(cfg["symbol"], days=7),  # 7-day hourly — same as mispricing
             fetch_social_sentiment(coin, cfg.get("subreddits")),
             fetch_fear_greed(limit=30),
             fetch_onchain_metrics(),
@@ -469,48 +469,43 @@ async def get_mispricing(coin: str = "bitcoin"):
     }
 
     # ── TCN-powered recommendation ──
-    # Fetch fresh price data for TCN
+    # ── SINGLE recommendation engine (backtested weights) ──
     try:
         hist = await fetch_historical_prices(cfg["symbol"], days=7)
     except Exception:
         hist = None
 
-    _rec_engine = RecommendationEngine()
     if hist is not None and len(hist) > 20:
-        tcn_rec = _rec_engine.get_recommendation(
+        rec_result = get_recommendation(
             price_df=hist,
             order_flow=order_flow,
             tm_sentiment=tm_ai_sentiment,
-            tm_summary=_tm_data.get("summary", ""),
-            polymarket_markets=polymarket_markets,
             fear_greed_data={"current": {"value": enhanced_indicators.get("fear_greed", 50)}, "average_30d": 50},
-            sentiment_data={"sentiment_score": enhanced_sentiment.get("sentiment_score", 0), "bullish_ratio": enhanced_sentiment.get("bullish_ratio", 0.5)},
+            polymarket_markets=polymarket_markets,
             thresholds=cfg["thresholds"],
+            sentiment_data={"sentiment_score": enhanced_sentiment.get("sentiment_score", 0), "bullish_ratio": enhanced_sentiment.get("bullish_ratio", 0.5)},
         )
-        next_day = tcn_rec.get("tcn_prediction", {})
+        recommended = rec_result.get("recommendation", {})
+        tcn_pred = rec_result.get("tcn_prediction", {})
     else:
-        tcn_rec = None
-        next_day = {"direction": "up", "probability": 0.5}
+        recommended = {"primary_side": "hold", "confidence": 0, "buy_case": {"reasons": [], "vote_count": 0}, "sell_case": {"reasons": [], "vote_count": 0}, "total_signals": 0}
+        tcn_pred = {"direction": "neutral", "probability": 0.5}
 
-    # ── Generate recommended trade from TCN + all signals ──
-    prediction_with_enhanced = {**prediction, "indicators": enhanced_indicators, "sentiment_signal": enhanced_sentiment}
-    recommended = await _build_recommendation(
-        signals, prediction_with_enhanced, cfg, polymarket_markets, order_flow, next_day,
-        tm_ai_sentiment, tm_price, tm_trending, tm_surging
-    )
+    # Override price with single source of truth
+    btc_price = await _get_btc_price()
+    current_price = btc_price["price"] if btc_price["price"] > 0 else prediction["current_price"]
 
     result = {
         "coin": coin,
         "symbol": cfg["symbol"],
-        "current_price": prediction["current_price"],
+        "current_price": current_price,
         "confidence": prediction["confidence"],
         "sentiment_signal": enhanced_sentiment,
         "indicators": enhanced_indicators,
         "signals": signals,
         "polymarket_count": len(polymarket_markets),
         "order_flow": order_flow,
-        "tcn_prediction": next_day,
-        "tcn_recommendation": tcn_rec.get("recommendation") if tcn_rec else None,
+        "tcn_prediction": tcn_pred,
         "tm_data": {
             "sentiment": tm_ai_sentiment,
             "price": tm_price,
