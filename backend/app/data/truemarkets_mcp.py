@@ -125,18 +125,20 @@ async def _fetch_price_data(symbol: str, window: str, resolution: str) -> dict:
         if points:
             return cached
 
-    # 2. Try direct API (may fail due to Cloudflare)
+    # 2. Try direct API via cloudscraper (bypasses Cloudflare)
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-            resp = await client.get(
-                f"{TM_API_BASE}/v1/prices/history",
-                params={"symbols": symbol, "window": window, "resolution": resolution},
-                headers=_headers(),
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                _save_cache(symbol, window, resolution, data)
-                return data
+        import cloudscraper
+        scraper = cloudscraper.create_scraper()
+        resp = scraper.get(
+            f"{TM_API_BASE}/v1/prices/history",
+            params={"symbols": symbol, "window": window, "resolution": resolution},
+            headers=_headers(),
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            _save_cache(symbol, window, resolution, data)
+            return data
     except Exception:
         pass
 
@@ -228,14 +230,12 @@ async def fetch_btc_price_history(window: str = "1d", resolution: str = "5m") ->
 async def fetch_btc_summary() -> dict:
     """Get AI-generated BTC summary with sentiment from True Markets."""
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-            resp = await client.get(
-                f"{TM_API_BASE}/v1/assets/summary",
-                params={"symbol": "BTC"},
-                headers=_headers(),
-            )
-            if resp.status_code == 200:
-                return resp.json()
+        import cloudscraper
+        scraper = cloudscraper.create_scraper()
+        resp = scraper.get(f"{TM_API_BASE}/v1/assets/summary",
+            params={"symbol": "BTC"}, headers=_headers(), timeout=15)
+        if resp.status_code == 200:
+            return resp.json()
     except Exception:
         pass
     return {}
@@ -244,13 +244,12 @@ async def fetch_btc_summary() -> dict:
 async def fetch_market_summary() -> dict:
     """Get overall market summary from True Markets."""
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-            resp = await client.get(
-                f"{TM_API_BASE}/v1/market/summary",
-                headers=_headers(),
-            )
-            if resp.status_code == 200:
-                return resp.json()
+        import cloudscraper
+        scraper = cloudscraper.create_scraper()
+        resp = scraper.get(f"{TM_API_BASE}/v1/market/summary",
+            headers=_headers(), timeout=15)
+        if resp.status_code == 200:
+            return resp.json()
     except Exception:
         pass
     return {}
