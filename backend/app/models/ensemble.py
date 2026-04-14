@@ -74,9 +74,11 @@ def compute_signals(
         macd_prob = 0.5
         macd_reason = "MACD flat"
 
+    # Split RSI and MACD into separate reasons so a bullish MACD
+    # never appears under sell just because RSI is bearish
     tech_prob = rsi_prob * 0.6 + macd_prob * 0.4
-    tech_reason = f"{rsi_reason}; {macd_reason}"
-    signals.append(Signal("Technical", tech_prob, tech_reason, W_TECHNICAL))
+    signals.append(Signal("RSI", rsi_prob, rsi_reason, W_TECHNICAL * 0.6))
+    signals.append(Signal("MACD", macd_prob, macd_reason, W_TECHNICAL * 0.4))
 
     # ── 2. TCN MODEL — weight 30% ───────────────────────
     tcn = DirectionTCNPredictor()
