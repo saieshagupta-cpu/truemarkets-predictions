@@ -116,30 +116,6 @@ export default function SignalBreakdown({ sentiment, indicators, weights, orderF
         </div>
       )}
 
-      {/* Recommendation weights */}
-      <div className="mt-3 pt-3 border-t border-tm-border">
-        <p className="text-[10px] text-tm-muted uppercase tracking-wider mb-2">Recommendation Weights</p>
-        <div className="space-y-1.5 text-[10px]">
-          {[
-            { label: "Model Direction", weight: 44, color: "bg-tm-blue", textColor: "text-tm-blue" },
-            { label: "Order Flow", weight: 22, color: "bg-tm-green", textColor: "text-tm-green" },
-            { label: "Fear & Greed", weight: 17, color: "bg-tm-yellow", textColor: "text-tm-yellow" },
-            { label: "RSI", weight: 11, color: "bg-tm-red", textColor: "text-tm-red" },
-            { label: "Sentiment", weight: 6, color: "bg-tm-purple", textColor: "text-tm-purple" },
-          ].map((w) => (
-            <div key={w.label} className="flex items-center gap-2">
-              <span className="text-tm-muted w-24">{w.label}</span>
-              <div className="flex-1 bg-tm-border/40 rounded-full h-1.5 overflow-hidden">
-                <div className={`${w.color} h-full rounded-full`} style={{ width: `${w.weight}%` }} />
-              </div>
-              <span className={`${w.textColor} w-8 text-right font-medium`}>{w.weight}%</span>
-            </div>
-          ))}
-        </div>
-        <p className="text-[9px] text-tm-muted mt-2">
-          Weights backtested on 2 years of daily BTC. See &ldquo;How it works&rdquo; for details.
-        </p>
-      </div>
     </div>
   );
 }

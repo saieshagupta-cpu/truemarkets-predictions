@@ -1,3 +1,4 @@
+import os
 import re
 import asyncio
 import time
@@ -287,18 +288,33 @@ async def get_chart_data(days: str = "1"):
         if time.time() - ts < cache_ttl:
             return data
 
-    # Fallback: True Markets API direct
-    from app.data.truemarkets_mcp import fetch_btc_price_history
+    # For longer timeframes (180d, YTD, 1Y), use 3-year CryptoCompare cache
+    from app.data.truemarkets_mcp import fetch_btc_price_history, CACHE_DIR, _iso_to_ms
+    import json as _json
 
-    # Map chart days to TM windows
-    tm_window_map = {"1": "1d", "5": "7d", "30": "1M", "180": "1M", "ytd": "1M", "365": "1M"}
-    tm_res_map = {"1": "1h", "5": "1h", "30": "1d", "180": "1d", "ytd": "1d", "365": "1d"}
-    window = tm_window_map.get(days, "1d")
-    resolution = tm_res_map.get(days, "5m")
+    cg_days = _ytd_days() if days == "ytd" else CHART_PERIODS[days]
+    if isinstance(cg_days, str):
+        cg_days = 30
 
-    try:
+    if cg_days > 30:
+        try:
+            with open(os.path.join(CACHE_DIR, "btc_3Y_1d.json")) as f:
+                hist = _json.load(f)
+            pts = hist["results"][0]["points"]
+            # Take last N days
+            pts = pts[-cg_days:] if cg_days < len(pts) else pts
+            raw_prices = [[_iso_to_ms(p["t"]), float(p["price"])] for p in pts]
+        except Exception:
+            raw_prices = []
+    else:
+        # Short timeframes: use TrueMarkets cache
+        tm_window_map = {"1": "1d", "5": "7d", "30": "1M"}
+        tm_res_map = {"1": "1h", "5": "1h", "30": "1d"}
+        window = tm_window_map.get(days, "1d")
+        resolution = tm_res_map.get(days, "1h")
         raw_prices = await fetch_btc_price_history(window=window, resolution=resolution)
 
+    try:
         # Downsample large datasets to ~200 points for performance
         if len(raw_prices) > 300:
             step = max(1, len(raw_prices) // 200)

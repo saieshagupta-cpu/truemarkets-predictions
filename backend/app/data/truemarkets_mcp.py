@@ -313,17 +313,21 @@ async def fetch_detailed_btc_stats() -> dict:
         if p0 > 0:
             change_30d = ((price - p0) / p0) * 100
 
+    # BTC circulating supply ~19.85M (slowly increasing, updated periodically)
+    btc_supply = 19_850_000
+    market_cap = price * btc_supply
+
     return {
         "price": price,
         "change_24h_pct": round(change_24h_pct, 2),
         "change_24h_usd": round(price * change_24h_pct / 100, 2),
-        "market_cap": 0,
+        "market_cap": round(market_cap),
         "volume_24h": 0,
         "high_24h": high_24h,
         "low_24h": low_24h,
-        "ath": 0,
-        "atl": 0,
-        "circulating_supply": 0,
+        "ath": 109000,
+        "atl": 67.81,
+        "circulating_supply": btc_supply,
         "max_supply": 21000000,
         "total_supply": 0,
         "price_change_7d": round(change_7d, 2),
