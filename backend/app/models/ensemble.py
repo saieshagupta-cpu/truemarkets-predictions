@@ -179,16 +179,14 @@ def recommend(signals: list[Signal]) -> dict:
     # Confidence: how far from 50%
     confidence = abs(weighted_prob - 0.5) * 2  # 0 = uncertain, 1 = certain
 
-    # Split reasons into buy_case and sell_case
-    # Only count signals that are clearly directional (not near 0.5)
+    # Split ALL signals into buy_case or sell_case — every signal picks a side
     buy_reasons = []
     sell_reasons = []
     for s in signals:
-        if s.side == "buy":
+        if s.prob_up >= 0.5:
             buy_reasons.append(s.reason)
-        elif s.side == "sell":
+        else:
             sell_reasons.append(s.reason)
-        # Neutral signals (prob 0.48-0.52) are omitted — they don't support either side
 
     return {
         "primary_side": side,
@@ -275,13 +273,15 @@ def get_recommendation(
             if best_down is None or abs(t - current_price) < abs(float(best_down[0]) - current_price):
                 best_down = (t_str, prob)
 
-    # Add 30-day outlook as context (does NOT count as a vote — it's a different timeframe)
-    outlook_notes = []
+    # Add 30-day outlook as a signal (counts as a vote)
     if best_up and best_up[1] > 0.30:
-        outlook_notes.append(f"30-day outlook: {best_up[1]*100:.0f}% probability of reaching ${int(float(best_up[0])):,}")
+        rec["buy_case"]["reasons"].append(f"30-day model: {best_up[1]*100:.0f}% chance of reaching ${int(float(best_up[0])):,}")
+        rec["buy_case"]["vote_count"] += 1
+        rec["total_signals"] += 1
     if best_down and best_down[1] > 0.30:
-        outlook_notes.append(f"30-day outlook: {best_down[1]*100:.0f}% probability of dropping to ${int(float(best_down[0])):,}")
-    rec["outlook"] = outlook_notes
+        rec["sell_case"]["reasons"].append(f"30-day model: {best_down[1]*100:.0f}% chance of dropping to ${int(float(best_down[0])):,}")
+        rec["sell_case"]["vote_count"] += 1
+        rec["total_signals"] += 1
 
     # Sentiment breakdown
     fg_value = fear_greed_data.get("current", {}).get("value", 50)

@@ -118,9 +118,17 @@ async def _get_btc_price() -> dict:
     # Priority 1: TM push data (freshest, from frontend)
     tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
     if tm_age < 180 and _tm_data["price"] > 0:
+        # Get 24h change from detailed stats (computed from price history)
+        change_24h = 0
+        try:
+            from app.data.truemarkets_mcp import fetch_detailed_btc_stats
+            stats = await fetch_detailed_btc_stats()
+            change_24h = stats.get("change_24h_pct", 0)
+        except Exception:
+            pass
         result = {
             "price": _tm_data["price"],
-            "change_24h": 0,
+            "change_24h": change_24h,
             "volume_24h": 0,
             "timestamp": _tm_data["updated"],
             "source": "truemarkets",
