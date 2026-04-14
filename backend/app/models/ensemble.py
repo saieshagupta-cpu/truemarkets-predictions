@@ -19,15 +19,14 @@ import torch
 from app.models.direction_tcn import DirectionTCNPredictor
 from app.config import SEQUENCE_LENGTH, MODEL_WEIGHTS_DIR
 
-# Signal weights — backtested then adjusted for production
-# TCN boosted from backtested 7% to 20% (it's our core model, underfits on proxy signals)
-# Polymarket order flow is the strongest empirical signal
-W_RSI = 0.05
+# Signal weights — backtested via logistic regression on 212 OOS test days (Oct 2025 – Apr 2026)
+# Train: 670 days, Val: 183 days, Test: 212 days
+W_RSI = 0.23          # 2nd strongest individual signal (55.2% solo)
 W_MACD = 0.05
-W_TCN = 0.18
-W_ORDER_FLOW = 0.32  # Pure BTC price momentum + acceleration
-W_SENTIMENT = 0.35   # True Markets AI + Fear & Greed
-# Polymarket = 0.05 (hardcoded in compute_signals, supplementary)
+W_TCN = 0.28          # Captures momentum patterns (contrarian coef)
+W_ORDER_FLOW = 0.30   # Strongest individual signal (55.7% solo) — pure BTC momentum
+W_SENTIMENT = 0.13    # TM AI + Fear & Greed
+# Polymarket = 0.01 hardcoded (nearly zero in backtest)
 
 
 class Signal:
@@ -153,8 +152,7 @@ def compute_signals(
     else:
         poly_prob = 0.5
         poly_reason = "Polymarket: no strong directional signal"
-    # Small weight — it's supplementary to the threshold table
-    signals.append(Signal("Polymarket", poly_prob, poly_reason, 0.05))
+    signals.append(Signal("Polymarket", poly_prob, poly_reason, 0.01))
 
     # ── 4. SENTIMENT (TM AI + Fear & Greed) — weight 10% ─
     fg_value = fear_greed_data.get("current", {}).get("value", 50)

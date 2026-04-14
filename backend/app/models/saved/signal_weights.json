@@ -1,8 +1,17 @@
 {
-  "TCN": 0.0646,
-  "RSI": 0.0261,
-  "MACD": 0.0137,
-  "OrderFlow": 0.4204,
-  "Sentiment": 0.4738,
-  "30dayModel": 0.0014
+  "weights": {
+    "TM_Sentiment": 0.1264,
+    "BTC_Momentum": 0.2965,
+    "TCN": 0.2777,
+    "RSI": 0.2271,
+    "MACD": 0.0513,
+    "Polymarket": 0.0054,
+    "30day_Model": 0.0157
+  },
+  "C": 0.1,
+  "val_accuracy": 0.5355191256830601,
+  "test_accuracy": 0.5,
+  "train_n": 670,
+  "val_n": 183,
+  "test_n": 212
 }
