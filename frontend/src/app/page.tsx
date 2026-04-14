@@ -176,7 +176,7 @@ function PredictionView({
                 <p><span className="text-tm-yellow font-medium">RSI</span> <span className="text-white">22%</span> &mdash; Mean-reversion at extremes (&lt;30 oversold = buy, &gt;70 overbought = sell). Best individual signal (53.1%).</p>
                 <p><span className="text-tm-green font-medium">True Markets Sentiment</span> <span className="text-white">16%</span> &mdash; AI analysis of 30+ news articles + contrarian Fear &amp; Greed.</p>
                 <p><span className="text-tm-yellow font-medium">MACD</span> <span className="text-white">3%</span> &mdash; Trend confirmation.</p>
-                <p><span className="text-tm-blue font-medium">GRU Model</span> <span className="text-white">1%</span> &mdash; 2-layer GRU (PMC11935774) trained on 5 years daily BTC. 52.8% test accuracy.</p>
+                <p><span className="text-tm-blue font-medium">CNN-LSTM + Boruta</span> <span className="text-white">6%</span> &mdash; Conv1D → LSTM hybrid (Dubey &amp; Enke 2025) with Boruta feature selection. 53.2% test accuracy on 400 OOS days.</p>
               </div>
               <p>
                 Each signal produces a direction and reason. When signals disagree, both sides are shown.

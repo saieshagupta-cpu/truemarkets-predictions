@@ -16,17 +16,17 @@ import numpy as np
 import pandas as pd
 import os
 import torch
-from app.models.direction_gru import DirectionGRUPredictor
+from app.models.direction_cnn_lstm import DirectionCNNLSTMPredictor
 from app.config import SEQUENCE_LENGTH, MODEL_WEIGHTS_DIR
 
-# Signal weights — backtested via logistic regression on 388 OOS test days (5-year dataset)
-# GRU model from PMC11935774 paper (2-layer, 100 units, dropout 0.2)
-W_RSI = 0.22          # Best individual signal (53.1%)
-W_MACD = 0.03
-W_TCN = 0.01          # GRU alone adds minimal value above momentum (correlated)
-W_ORDER_FLOW = 0.31   # BTC momentum — strongest composite signal
-W_SENTIMENT = 0.16    # TM AI + Fear & Greed (contrarian)
-# Polymarket = 0.26 hardcoded below (contrarian signal)
+# Signal weights — backtested on 400 OOS test days (5-year dataset)
+# CNN-LSTM + Boruta (Dubey & Enke 2025, Machine Learning with Applications)
+W_RSI = 0.22
+W_MACD = 0.10
+W_TCN = 0.06          # CNN-LSTM model
+W_ORDER_FLOW = 0.17   # BTC momentum
+W_SENTIMENT = 0.15    # TM AI + Fear & Greed
+# Polymarket = 0.29 hardcoded (contrarian)
 
 
 class Signal:
@@ -80,9 +80,9 @@ def compute_signals(
     signals.append(Signal("RSI", rsi_prob, rsi_reason, W_RSI))
     signals.append(Signal("MACD", macd_prob, macd_reason, W_MACD))
 
-    # ── 2. GRU MODEL (PMC11935774) — weight based on backtest ──
-    gru = DirectionGRUPredictor()
-    # Build 6 features matching GRU training
+    # ── 2. CNN-LSTM MODEL (Dubey & Enke 2025) — weight based on backtest ──
+    model = DirectionCNNLSTMPredictor()
+    # Build features matching CNN-LSTM training (Boruta-selected subset)
     import pandas as _pd
     _n = len(prices)
     _log_ret = np.concatenate([[0], np.diff(np.log(np.maximum(prices, 1e-10)))])
@@ -96,14 +96,17 @@ def compute_signals(
     _e26 = _pd.Series(prices).ewm(span=26).mean().values
     _macd_r = (_e12 - _e26) - _pd.Series(_e12 - _e26).ewm(span=9).mean().values
     _macd_n = _macd_r / np.maximum(_pd.Series(np.abs(_macd_r)).rolling(20, min_periods=1).mean().values, 1)
-    _price_s = (prices - prices.min()) / (prices.max() - prices.min() + 1e-10)
-    gru_features = np.column_stack([_price_s, _log_ret, _vol5, _vol20, _rsi, _macd_n])
 
-    tcn_prob = gru.predict_direction(gru_features)
+    # Use all features the model was trained on, let predictor handle selection
+    model_features = np.column_stack([_log_ret, _rsi, _log_ret, np.zeros(_n), np.zeros(_n),
+                                       np.zeros(_n), np.ones(_n), np.zeros(_n),
+                                       np.where(_vol20>1e-10, _vol5/_vol20, 1), np.zeros(_n)])
+    # If model has norm_params with selected features, it handles the right subset
+    tcn_prob = model.predict_direction(model_features)
 
     tcn_dir = "up" if tcn_prob > 0.5 else "down"
     tcn_pct = int(tcn_prob * 100) if tcn_prob > 0.5 else int((1 - tcn_prob) * 100)
-    tcn_reason = f"GRU model: {tcn_pct}% probability BTC moves {tcn_dir} tomorrow"
+    tcn_reason = f"CNN-LSTM model: {tcn_pct}% probability BTC moves {tcn_dir} tomorrow"
     signals.append(Signal("TCN", tcn_prob, tcn_reason, W_TCN))
 
     # ── 3. BTC ORDER FLOW (pure price-derived) — weight 35% ──
@@ -156,7 +159,7 @@ def compute_signals(
     else:
         poly_prob = 0.5
         poly_reason = "Polymarket: no strong directional signal"
-    signals.append(Signal("Polymarket", poly_prob, poly_reason, 0.26))
+    signals.append(Signal("Polymarket", poly_prob, poly_reason, 0.29))
 
     # ── 4. SENTIMENT (TM AI + Fear & Greed) — weight 10% ─
     fg_value = fear_greed_data.get("current", {}).get("value", 50)

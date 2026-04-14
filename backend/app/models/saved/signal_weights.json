@@ -1,14 +1,27 @@
 {
   "weights": {
-    "TM_Sentiment": 0.1561,
-    "BTC_Momentum": 0.3074,
-    "GRU_Model": 0.0008,
-    "RSI": 0.2251,
-    "MACD": 0.033,
-    "Polymarket": 0.259,
-    "30day_Model": 0.0185
+    "TM_Sentiment": 0.1491,
+    "BTC_Momentum": 0.1654,
+    "CNN_LSTM": 0.0546,
+    "RSI": 0.2187,
+    "MACD": 0.0946,
+    "Polymarket": 0.2918,
+    "30day_Model": 0.0258
   },
-  "gru_test_acc": 0.5283505154639175,
-  "combined_acc": 0.5309278350515464,
-  "test_n": 388
+  "model": "CNN-LSTM + Boruta",
+  "test_acc": 0.5325,
+  "combined_acc": 0.5325,
+  "test_n": 400,
+  "selected_features": [
+    "log_return",
+    "rsi",
+    "mom_1",
+    "mom_20",
+    "upper_wick",
+    "range_pct",
+    "rel_volume",
+    "vol_change",
+    "vol_ratio",
+    "accel"
+  ]
 }
