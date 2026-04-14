@@ -6,13 +6,15 @@ Prod: https://api.truemarkets.co/v1/conductor/
 """
 
 import httpx
-from app.config import TRUEMARKETS_API_BASE, TRUEMARKETS_API_KEY
+from app.config import TRUEMARKETS_API_BASE
+from app.data.truemarkets_mcp import _make_jwt
 
 
 def _headers() -> dict:
     h = {"Content-Type": "application/json"}
-    if TRUEMARKETS_API_KEY:
-        h["Authorization"] = f"Bearer {TRUEMARKETS_API_KEY}"
+    token = _make_jwt()
+    if token:
+        h["Authorization"] = f"Bearer {token}"
     return h
 
 

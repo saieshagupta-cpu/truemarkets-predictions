@@ -23,14 +23,14 @@ export default function MispricingSignals({ signals, currentPrice, symbol, hasPo
         <p className="text-xs text-tm-muted leading-relaxed">
           {hasPolymarket ? (
             <>
-              Side-by-side comparison of our <span className="text-tm-accent">ensemble ML model</span> vs
+              Side-by-side comparison of our <span className="text-tm-accent">TCN prediction model</span> vs
               <span className="text-tm-blue"> Polymarket</span> crowd predictions.
               Both estimate the probability of {symbol} reaching each price target within 30 days.
             </>
           ) : (
             <>
-              Our ensemble ML model estimates the probability that {symbol} reaches each price target within 30 days.
-              Based on price volatility, technical indicators, and sentiment analysis.
+              Our TCN model estimates the probability that {symbol} reaches each price target within 30 days.
+              Based on 3 years of price patterns, volatility, and True Markets sentiment.
             </>
           )}
         </p>

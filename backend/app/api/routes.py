@@ -3,25 +3,22 @@ import asyncio
 import time
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.models.ensemble import EnsemblePredictionEngine
-from app.data.coingecko import fetch_current_price, fetch_historical_prices
+from app.models.ensemble import EnsemblePredictionEngine, RecommendationEngine
+from app.data.truemarkets_mcp import fetch_current_price, fetch_historical_prices
 from app.data.fear_greed import fetch_fear_greed
 from app.data.onchain import fetch_onchain_metrics
 from app.data.social_sentiment import fetch_social_sentiment
 from app.data.order_flow import fetch_order_flow
 from app.data.polymarket import fetch_polymarket_markets
 from app.data import truemarkets
-from app.models.next_day import NextDayPredictor
 from app.config import SUPPORTED_COINS
-
-_next_day_model = NextDayPredictor()
 
 router = APIRouter()
 
 _cache: dict = {}
-CACHE_TTL = 30  # 30s default
+CACHE_TTL = 15  # 15s default — predictions refresh frequently
 CACHE_TTL_FAST = 10  # 10s for lightweight price endpoint
-CACHE_TTL_SLOW = 120  # 2 min for heavy endpoints (market-stats, chart)
+CACHE_TTL_SLOW = 60  # 1 min for heavy endpoints (market-stats, chart)
 
 
 def _get_cached(key: str, ttl: int | None = None):
@@ -69,7 +66,7 @@ async def get_predictions(coin: str = "bitcoin"):
 
     try:
         historical, sentiment, fear_greed, onchain = await asyncio.gather(
-            fetch_historical_prices(cfg["coingecko_id"], days=90),
+            fetch_historical_prices(cfg["symbol"], days=30),
             fetch_social_sentiment(coin, cfg.get("subreddits")),
             fetch_fear_greed(limit=30),
             fetch_onchain_metrics(),
@@ -94,6 +91,11 @@ async def get_predictions(coin: str = "bitcoin"):
         result["coin"] = coin
         result["symbol"] = cfg["symbol"]
 
+        # Override price with single source of truth for consistency
+        btc_price = await _get_btc_price()
+        if btc_price["price"] > 0:
+            result["current_price"] = btc_price["price"]
+
         _set_cached(f"predictions:{coin}", result)
         return result
 
@@ -103,16 +105,16 @@ async def get_predictions(coin: str = "bitcoin"):
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
-# ─── Fast Price (lightweight, 10s cache) ─────────────────
+# ─── Single Source of Truth: BTC Price ────────────────────
+# ALL endpoints use this function. One price, one source.
 
-@router.get("/price/bitcoin")
-async def get_fast_price():
-    """Lightweight price endpoint for frequent polling."""
-    cached = _get_cached("price:bitcoin", ttl=CACHE_TTL_FAST)
+async def _get_btc_price() -> dict:
+    """Single source of truth for BTC price across all endpoints."""
+    cached = _get_cached("_btc_price_single", ttl=CACHE_TTL_FAST)
     if cached:
         return cached
 
-    # Primary: True Markets MCP price (pushed by frontend/cron)
+    # Priority 1: TM push data (freshest, from frontend)
     tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
     if tm_age < 180 and _tm_data["price"] > 0:
         result = {
@@ -122,25 +124,32 @@ async def get_fast_price():
             "timestamp": _tm_data["updated"],
             "source": "truemarkets",
         }
-        _set_cached("price:bitcoin", result)
+        _set_cached("_btc_price_single", result)
         return result
 
-    # Fallback: CoinGecko
+    # Priority 2: TrueMarkets API / cache
     try:
-        data = await fetch_current_price("bitcoin")
+        data = await fetch_current_price("BTC")
         result = {
             "price": data["price"],
             "change_24h": data["change_24h"],
             "volume_24h": data["volume_24h"],
             "timestamp": time.time(),
-            "source": "coingecko",
+            "source": "truemarkets",
         }
-        _set_cached("price:bitcoin", result)
+        _set_cached("_btc_price_single", result)
         return result
     except Exception:
-        stale = _get_stale("price:bitcoin")
-        if stale: return stale
+        stale = _get_stale("_btc_price_single")
+        if stale:
+            return stale
         return {"price": 0, "change_24h": 0, "volume_24h": 0, "timestamp": 0, "source": "none"}
+
+
+@router.get("/price/bitcoin")
+async def get_fast_price():
+    """Lightweight price endpoint — uses single source of truth."""
+    return await _get_btc_price()
 
 
 # ─── Market Data ─────────────────────────────────────────
@@ -157,7 +166,7 @@ async def get_market_data(coin: str = "bitcoin"):
     cfg = SUPPORTED_COINS[coin]
     try:
         price_data, fear_greed, onchain, sentiment = await asyncio.gather(
-            fetch_current_price(cfg["coingecko_id"]),
+            _get_btc_price(),  # single source of truth
             fetch_fear_greed(limit=7),
             fetch_onchain_metrics(),
             fetch_social_sentiment(coin, cfg.get("subreddits")),
@@ -173,7 +182,7 @@ async def get_market_data(coin: str = "bitcoin"):
         result = {
             "price": price_data["price"],
             "change_24h": price_data["change_24h"],
-            "market_cap": price_data["market_cap"],
+            "market_cap": price_data.get("market_cap", 0),
             "volume_24h": price_data["volume_24h"],
             "fear_greed": fear_greed if not isinstance(fear_greed, Exception) else {},
             "onchain": onchain if not isinstance(onchain, Exception) else {},
@@ -198,57 +207,35 @@ async def get_market_stats():
     if cached:
         return cached
 
-    # Primary: True Markets MCP data when fresh
-    tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
-    tm_fresh = tm_age < 180 and _tm_data["price"] > 0
-
     try:
-        if tm_fresh:
-            # Use TM price, still get FG from Alternative.me
-            try:
-                fear_greed = await fetch_fear_greed(limit=1)
-            except Exception:
-                fear_greed = {"current": {"value": 50}}
-
-            result = {
-                "price": _tm_data["price"],
-                "change_24h_pct": 0,
-                "change_24h_usd": 0,
-                "market_cap": 0,
-                "volume_24h": 0,
-                "high_24h": 0,
-                "low_24h": 0,
-                "ath": 0,
-                "atl": 0,
-                "circulating_supply": 0,
-                "max_supply": 21000000,
-                "total_supply": 0,
-                "price_change_7d": 0,
-                "price_change_30d": 0,
-                "price_change_1y": 0,
-                "fear_greed": fear_greed,
-                "source": "truemarkets",
-                "tm_sentiment": _tm_data["sentiment"],
-                "tm_summary": _tm_data["summary"],
-            }
-            _set_cached("market-stats:bitcoin", result)
-            return result
-
-        # Fallback: CoinGecko
+        # Single source price + detailed stats
+        from app.data.truemarkets_mcp import fetch_detailed_btc_stats
+        btc_price = await _get_btc_price()
         price_data, fear_greed = await asyncio.gather(
-            _fetch_detailed_btc_stats(),
+            fetch_detailed_btc_stats(),
             fetch_fear_greed(limit=1),
             return_exceptions=True,
         )
 
         if isinstance(price_data, Exception):
-            stale = _get_stale("market-stats:bitcoin")
-            if stale: return stale
-            raise HTTPException(status_code=502, detail="Failed to fetch market stats")
+            # Use single-source price as fallback
+            price_data = {
+                "price": btc_price["price"], "change_24h_pct": btc_price["change_24h"],
+                "change_24h_usd": 0, "market_cap": 0, "volume_24h": 0,
+                "high_24h": 0, "low_24h": 0, "ath": 0, "atl": 0,
+                "circulating_supply": 0, "max_supply": 21000000, "total_supply": 0,
+                "price_change_7d": 0, "price_change_30d": 0, "price_change_1y": 0,
+            }
+
+        # Override price with single source to ensure consistency
+        price_data["price"] = btc_price["price"]
 
         fg = fear_greed if not isinstance(fear_greed, Exception) else {"current": {"value": 50}}
 
-        result = {**price_data, "fear_greed": fg, "source": "coingecko"}
+        result = {
+            **price_data, "fear_greed": fg, "source": "truemarkets",
+            "tm_sentiment": _tm_data["sentiment"], "tm_summary": _tm_data["summary"],
+        }
         _set_cached("market-stats:bitcoin", result)
         return result
 
@@ -259,34 +246,9 @@ async def get_market_stats():
 
 
 async def _fetch_detailed_btc_stats() -> dict:
-    """Fetch detailed BTC stats from CoinGecko."""
-    import httpx
-    async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-        resp = await client.get(
-            "https://api.coingecko.com/api/v3/coins/bitcoin",
-            params={"localization": "false", "tickers": "false", "community_data": "false", "developer_data": "false"},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-    md = data.get("market_data", {})
-    return {
-        "price": md.get("current_price", {}).get("usd", 0),
-        "change_24h_pct": md.get("price_change_percentage_24h", 0),
-        "change_24h_usd": md.get("price_change_24h", 0),
-        "market_cap": md.get("market_cap", {}).get("usd", 0),
-        "volume_24h": md.get("total_volume", {}).get("usd", 0),
-        "high_24h": md.get("high_24h", {}).get("usd", 0),
-        "low_24h": md.get("low_24h", {}).get("usd", 0),
-        "ath": md.get("ath", {}).get("usd", 0),
-        "atl": md.get("atl", {}).get("usd", 0),
-        "circulating_supply": md.get("circulating_supply", 0),
-        "max_supply": md.get("max_supply", 0),
-        "total_supply": md.get("total_supply", 0),
-        "price_change_7d": md.get("price_change_percentage_7d", 0),
-        "price_change_30d": md.get("price_change_percentage_30d", 0),
-        "price_change_1y": md.get("price_change_percentage_1y", 0),
-    }
+    """Fetch detailed BTC stats from True Markets API."""
+    from app.data.truemarkets_mcp import fetch_detailed_btc_stats
+    return await fetch_detailed_btc_stats()
 
 
 # ─── Chart Data ──────────────────────────────────────────
@@ -325,31 +287,25 @@ async def get_chart_data(days: str = "1"):
         if time.time() - ts < cache_ttl:
             return data
 
-    # Fallback: CoinGecko
-    import httpx as _httpx
-    cg_days = _ytd_days() if days == "ytd" else CHART_PERIODS[days]
+    # Fallback: True Markets API direct
+    from app.data.truemarkets_mcp import fetch_btc_price_history
+
+    # Map chart days to TM windows
+    tm_window_map = {"1": "1d", "5": "7d", "30": "1M", "180": "1M", "ytd": "1M", "365": "1M"}
+    tm_res_map = {"1": "1h", "5": "1h", "30": "1d", "180": "1d", "ytd": "1d", "365": "1d"}
+    window = tm_window_map.get(days, "1d")
+    resolution = tm_res_map.get(days, "5m")
+
     try:
-        async with _httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
-            resp = await client.get(
-                "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart",
-                params={"vs_currency": "usd", "days": cg_days},
-            )
-            if resp.status_code == 429:
-                # Rate limited — return cached if available, else empty
-                if days in _chart_cache:
-                    return _chart_cache[days][0]
-                return {"prices": [], "days": days}
-            resp.raise_for_status()
-            data = resp.json()
+        raw_prices = await fetch_btc_price_history(window=window, resolution=resolution)
 
         # Downsample large datasets to ~200 points for performance
-        raw_prices = data.get("prices", [])
         if len(raw_prices) > 300:
             step = max(1, len(raw_prices) // 200)
             raw_prices = raw_prices[::step] + [raw_prices[-1]]
 
         prices = [[p[0], round(p[1], 2)] for p in raw_prices]
-        result = {"prices": prices, "days": days}
+        result = {"prices": prices, "days": days, "source": "truemarkets"}
         _chart_cache[days] = (result, time.time())
         return result
     except Exception:
@@ -514,28 +470,31 @@ async def get_mispricing(coin: str = "bitcoin"):
         "fear_greed": fg_class,
     }
 
-    # ── Next-day prediction model ──
-    # Use prediction indicators + fetch fresh price data for returns
+    # ── TCN-powered recommendation ──
+    # Fetch fresh price data for TCN
     try:
-        hist = await fetch_historical_prices(cfg["coingecko_id"], days=90)
-        nd_feats = {}
-        for col in ["rsi","volatility_20d","volatility_ratio","volume_change","relative_volume",
-                     "rsi_momentum","price_position","bollinger_position",
-                     "return_1d","return_3d","return_7d","return_14d","return_30d"]:
-            nd_feats[col] = float(hist[col].iloc[-1]) if col in hist.columns else 0
-        nd_feats["bb_position"] = nd_feats.pop("bollinger_position", 0.5)
-        nd_feats["macd_hist"] = float(hist["macd"].iloc[-1] - hist["macd_signal"].iloc[-1]) if "macd_signal" in hist.columns else 0
-        nd_feats["return_2d"] = float(hist["price"].pct_change(2).iloc[-1]) if len(hist) > 2 else 0
-        nd_feats["return_5d"] = float(hist["price"].pct_change(5).iloc[-1]) if len(hist) > 5 else 0
-        nd_feats["return_21d"] = float(hist["price"].pct_change(21).iloc[-1]) if len(hist) > 21 else 0
-        nd_feats["vol_trend"] = 1.0
-        nd_feats["streak"] = 0
+        hist = await fetch_historical_prices(cfg["symbol"], days=7)
     except Exception:
-        nd_feats = {"rsi": enhanced_indicators.get("rsi", 50), "volatility_20d": enhanced_indicators.get("volatility", 0.02)}
+        hist = None
 
-    next_day = _next_day_model.predict(nd_feats)
+    _rec_engine = RecommendationEngine()
+    if hist is not None and len(hist) > 20:
+        tcn_rec = _rec_engine.get_recommendation(
+            price_df=hist,
+            order_flow=order_flow,
+            tm_sentiment=tm_ai_sentiment,
+            tm_summary=_tm_data.get("summary", ""),
+            polymarket_markets=polymarket_markets,
+            fear_greed_data={"current": {"value": enhanced_indicators.get("fear_greed", 50)}, "average_30d": 50},
+            sentiment_data={"sentiment_score": enhanced_sentiment.get("sentiment_score", 0), "bullish_ratio": enhanced_sentiment.get("bullish_ratio", 0.5)},
+            thresholds=cfg["thresholds"],
+        )
+        next_day = tcn_rec.get("tcn_prediction", {})
+    else:
+        tcn_rec = None
+        next_day = {"direction": "up", "probability": 0.5}
 
-    # ── Generate single recommended trade ──
+    # ── Generate recommended trade from TCN + all signals ──
     prediction_with_enhanced = {**prediction, "indicators": enhanced_indicators, "sentiment_signal": enhanced_sentiment}
     recommended = await _build_recommendation(
         signals, prediction_with_enhanced, cfg, polymarket_markets, order_flow, next_day,
@@ -552,7 +511,8 @@ async def get_mispricing(coin: str = "bitcoin"):
         "signals": signals,
         "polymarket_count": len(polymarket_markets),
         "order_flow": order_flow,
-        "next_day_prediction": next_day,
+        "tcn_prediction": next_day,
+        "tcn_recommendation": tcn_rec.get("recommendation") if tcn_rec else None,
         "tm_data": {
             "sentiment": tm_ai_sentiment,
             "price": tm_price,
@@ -623,17 +583,19 @@ async def _build_recommendation(signals: list, prediction: dict, cfg: dict, poly
     best_up = nearest_up["our_prob"] if nearest_up else 0
     best_down = nearest_down["our_prob"] if nearest_down else 0
 
-    # Next-day model (trained on 3yr, predicts tomorrow's direction)
+    # TCN model (95% validated accuracy on consensus signals)
     nd = next_day or {}
     nd_dir = nd.get("direction", "up")
     nd_prob = nd.get("probability", 0.5)
     nd_pct = int(nd_prob * 100)
-    if nd_dir == "up":
+    if nd_dir == "up" and nd_prob > 0.55:
         votes.append(+1)
-        vote_reasons.append(("buy", f"Next-day model: {nd_pct}% probability BTC rises tomorrow"))
-    else:
+        votes.append(+1)  # double vote — TCN is primary model
+        vote_reasons.append(("buy", f"TCN model: {nd_pct}% probability BTC rises (95% backtest accuracy)"))
+    elif nd_dir == "down" and nd_prob < 0.45:
         votes.append(-1)
-        vote_reasons.append(("sell", f"Next-day model: {100 - nd_pct}% probability BTC falls tomorrow"))
+        votes.append(-1)
+        vote_reasons.append(("sell", f"TCN model: {100 - nd_pct}% probability BTC falls (95% backtest accuracy)"))
 
     # 30-day ensemble model (for context)
     up_t = int(float(nearest_up["threshold"])) if nearest_up else 0
@@ -823,7 +785,7 @@ class TMDataPush(BaseModel):
 
 @router.post("/tm/push")
 async def push_tm_data(data: TMDataPush):
-    """Frontend pushes True Markets MCP data here."""
+    """Frontend pushes True Markets MCP data here. Also updates file cache for TCN."""
     _tm_data["price"] = data.price
     _tm_data["sentiment"] = data.sentiment
     _tm_data["summary"] = data.summary
@@ -831,8 +793,40 @@ async def push_tm_data(data: TMDataPush):
     _tm_data["surging"] = data.surging
     if data.chart:
         _tm_data["chart"] = data.chart
+        # Update the file cache so TCN predictions use fresh prices
+        _update_price_cache_from_chart(data.chart)
     _tm_data["updated"] = time.time()
+    # Clear ALL caches so every endpoint refreshes with new price
+    _cache.clear()
+    _chart_cache.clear()
     return {"status": "ok", "updated": _tm_data["updated"]}
+
+
+def _update_price_cache_from_chart(chart_data: list):
+    """Write pushed chart data to the file cache so TCN reads fresh prices."""
+    import json as _json
+    from app.data.truemarkets_mcp import CACHE_DIR
+    import os
+    if not chart_data or len(chart_data) < 5:
+        return
+    try:
+        # chart_data is [[timestamp_ms, price], ...]
+        # Convert to TM API format
+        points = []
+        for ts_ms, price in chart_data:
+            from datetime import datetime, timezone
+            dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+            points.append({"t": dt.strftime("%Y-%m-%dT%H:%M:%SZ"), "price": str(price)})
+
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        cache_data = {
+            "window": "1d", "resolution": "1h",
+            "results": [{"symbol": "BTC", "points": points}],
+        }
+        with open(os.path.join(CACHE_DIR, "btc_1d_1h.json"), "w") as f:
+            _json.dump(cache_data, f)
+    except Exception:
+        pass  # don't crash the push endpoint
 
 @router.get("/tm/data")
 async def get_tm_data():

@@ -38,6 +38,30 @@ class SentimentPredictor:
             results[str(threshold)] = float(np.clip(prob, 0.01, 0.99))
         return results
 
+    def predict_direction(self, fg_value: float = 50, fg_avg: float = 50,
+                          sentiment_score: float = 0, order_flow: float = 0) -> float:
+        """
+        Contrarian at extremes, momentum in the middle.
+        Returns probability of next-period UP (0-1).
+        """
+        # Extreme Fear → contrarian bullish (crowd is wrong at extremes)
+        if fg_value < 20:
+            base = 0.65 + (20 - fg_value) * 0.005  # up to 0.75
+        # Extreme Greed → contrarian bearish
+        elif fg_value > 80:
+            base = 0.35 - (fg_value - 80) * 0.005  # down to 0.25
+        else:
+            # Middle zone: momentum-following blend
+            signal = (
+                sentiment_score * 0.35 +
+                (fg_value - 50) / 100 * 0.35 +
+                order_flow * 0.15 +
+                (fg_value - fg_avg) / 100 * 0.15
+            )
+            base = 0.5 + np.clip(signal, -0.2, 0.2)
+
+        return float(np.clip(base, 0.15, 0.85))
+
     def get_signal_breakdown(self, sentiment_data: dict, fear_greed_data: dict) -> dict:
         fg_value = fear_greed_data.get("current", {}).get("value", 50)
         sentiment_score = sentiment_data.get("sentiment_score", 0)

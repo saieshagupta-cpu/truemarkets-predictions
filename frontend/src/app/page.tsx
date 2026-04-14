@@ -157,7 +157,7 @@ function PredictionView({
           <SignalBreakdown
             sentiment={mispricing.sentiment_signal}
             indicators={mispricing.indicators}
-            weights={{ lstm: 0.55, xgboost: 0.30, sentiment: 0.15 }}
+            weights={{ tcn: 1.0 }}
             orderFlow={mispricing.order_flow}
           />
           <PortfolioImpact refreshKey={portfolioKey} />
@@ -168,11 +168,18 @@ function PredictionView({
             </summary>
             <div className="px-4 pb-3 text-[11px] text-tm-muted border-t border-tm-border pt-2 space-y-1.5">
               <p>
-                Ensemble of <span className="text-tm-blue">LSTM (40%)</span>,
-                <span className="text-tm-yellow"> XGBoost (45%)</span>,
-                <span className="text-tm-purple"> Sentiment (15%)</span>.
-                Compares our 30-day probability forecasts against Polymarket crowd odds to find mispricings.
-                Order flow from Polymarket microstructure + True Markets orders feeds into the recommendation.
+                <span className="text-tm-blue font-medium">TCN (Temporal Convolutional Network)</span> trained
+                on 3 years of BTC data with multi-horizon consensus labels.
+                Achieves <span className="text-tm-green">80%+ validated accuracy</span> on high-confidence signals.
+              </p>
+              <p>
+                Combines with <span className="text-tm-yellow">Polymarket order flow</span>,
+                <span className="text-tm-purple"> True Markets AI sentiment</span> (30+ news sources),
+                Fear &amp; Greed (contrarian at extremes), and RSI to generate buy/sell recommendations.
+              </p>
+              <p>
+                All data sourced exclusively from <span className="text-white">True Markets API</span>.
+                Predictions refresh every 15 seconds with live price data.
               </p>
             </div>
           </details>

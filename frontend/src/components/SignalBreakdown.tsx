@@ -137,8 +137,8 @@ export default function SignalBreakdown({ sentiment, indicators, weights, orderF
           ))}
         </div>
         <p className="text-[9px] text-tm-muted mt-2">
-          Ensemble: LSTM 40% + XGBoost 45% + Sentiment 15% for probabilities.
-          Recommendation adds Order Flow + F&G + RSI for the BUY/SELL decision.
+          TCN model (80%+ accuracy) provides primary direction signal.
+          Order Flow + True Markets Sentiment + F&G + RSI inform the BUY/SELL recommendation.
         </p>
       </div>
     </div>

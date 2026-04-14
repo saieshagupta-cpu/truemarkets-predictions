@@ -10,7 +10,8 @@ Combined into a single order flow signal: buy pressure vs sell pressure.
 import json
 import numpy as np
 import httpx
-from app.config import POLYMARKET_GAMMA_BASE, TRUEMARKETS_API_BASE, TRUEMARKETS_API_KEY
+from app.config import POLYMARKET_GAMMA_BASE, TRUEMARKETS_API_BASE
+from app.data.truemarkets_mcp import _make_jwt
 
 
 async def fetch_order_flow(coin: str = "bitcoin", polymarket_markets: list | None = None) -> dict:
@@ -131,7 +132,8 @@ async def _analyze_truemarkets_flow() -> dict:
     Analyze buy vs sell pressure from True Markets order history.
     """
     try:
-        headers = {"Authorization": f"Bearer {TRUEMARKETS_API_KEY}"} if TRUEMARKETS_API_KEY else {}
+        token = _make_jwt()
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 f"{TRUEMARKETS_API_BASE}/orders",
