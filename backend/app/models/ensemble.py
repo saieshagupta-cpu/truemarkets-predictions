@@ -177,21 +177,20 @@ def recommend(signals: list[Signal]) -> dict:
     # Confidence: how far from 50%
     confidence = abs(weighted_prob - 0.5) * 2  # 0 = uncertain, 1 = certain
 
-    # Split reasons into buy_case and sell_case
+    # Split reasons into buy_case and sell_case — clean reasons, no weight labels
     buy_reasons = []
     sell_reasons = []
     for s in signals:
-        label = f"[{s.name} {s.weight*100:.0f}%]"
         if s.side == "buy":
-            buy_reasons.append(f"{label} {s.reason}")
+            buy_reasons.append(s.reason)
         elif s.side == "sell":
-            sell_reasons.append(f"{label} {s.reason}")
+            sell_reasons.append(s.reason)
         else:
             # Neutral signals go to whichever side they lean towards
             if s.prob_up >= 0.5:
-                buy_reasons.append(f"{label} {s.reason}")
+                buy_reasons.append(s.reason)
             else:
-                sell_reasons.append(f"{label} {s.reason}")
+                sell_reasons.append(s.reason)
 
     return {
         "primary_side": side,

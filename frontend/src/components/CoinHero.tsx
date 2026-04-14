@@ -9,7 +9,7 @@ interface CoinHeroProps {
 
 export default function CoinHero({ mispricing, market }: CoinHeroProps) {
   const price = market?.price ?? mispricing.current_price;
-  const change = market?.change_24h ?? 0;
+  const change = market?.change_24h && market.change_24h !== 0 ? market.change_24h : null;
   const conf = Math.round(mispricing.confidence * 100);
   const sentiment = mispricing.sentiment_signal;
 
@@ -38,9 +38,11 @@ export default function CoinHero({ mispricing, market }: CoinHeroProps) {
               <span className="text-xl font-semibold">
                 ${price.toLocaleString(undefined, { maximumFractionDigits: price > 100 ? 0 : 2 })}
               </span>
-              <span className={`text-sm font-medium ${change >= 0 ? "text-tm-green" : "text-tm-red"}`}>
-                {change >= 0 ? "+" : ""}{change.toFixed(2)}%
-              </span>
+              {change !== null && (
+                <span className={`text-sm font-medium ${change >= 0 ? "text-tm-green" : "text-tm-red"}`}>
+                  {change >= 0 ? "+" : ""}{change.toFixed(2)}% <span className="text-tm-muted font-normal">24h</span>
+                </span>
+              )}
             </div>
             {market && (
               <div className="flex gap-4 mt-1 text-xs text-tm-muted">

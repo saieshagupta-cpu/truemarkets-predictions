@@ -166,20 +166,19 @@ function PredictionView({
             <summary className="px-4 py-2.5 cursor-pointer text-xs text-tm-muted hover:text-tm-text">
               How it works
             </summary>
-            <div className="px-4 pb-3 text-[11px] text-tm-muted border-t border-tm-border pt-2 space-y-1.5">
+            <div className="px-4 pb-3 text-[11px] text-tm-muted border-t border-tm-border pt-2 space-y-2">
               <p>
-                <span className="text-tm-blue font-medium">TCN (Temporal Convolutional Network)</span> trained
-                on 3 years of BTC data with multi-horizon consensus labels.
-                Achieves <span className="text-tm-green">80%+ validated accuracy</span> on high-confidence signals.
+                Four signals are blended with <span className="text-white font-medium">weights backtested on 2 years of daily BTC data</span> (Apr 2023 &ndash; Apr 2025):
               </p>
+              <div className="space-y-1 pl-2">
+                <p><span className="text-tm-yellow font-medium">Technical (RSI + MACD)</span> <span className="text-white">40%</span> &mdash; Mean-reversion at RSI extremes, MACD trend direction</p>
+                <p><span className="text-tm-blue font-medium">TCN Model</span> <span className="text-white">30%</span> &mdash; Temporal Convolutional Network trained on 3 years of BTC with multi-horizon consensus labels</p>
+                <p><span className="text-tm-purple font-medium">Order Flow</span> <span className="text-white">20%</span> &mdash; Polymarket buy/sell volume pressure + True Markets order history</p>
+                <p><span className="text-tm-green font-medium">Sentiment</span> <span className="text-white">10%</span> &mdash; True Markets AI (30+ news sources) + Fear &amp; Greed (contrarian at extremes)</p>
+              </div>
               <p>
-                Combines with <span className="text-tm-yellow">Polymarket order flow</span>,
-                <span className="text-tm-purple"> True Markets AI sentiment</span> (30+ news sources),
-                Fear &amp; Greed (contrarian at extremes), and RSI to generate buy/sell recommendations.
-              </p>
-              <p>
-                All data sourced exclusively from <span className="text-white">True Markets API</span>.
-                Predictions refresh every 15 seconds with live price data.
+                Each signal produces a direction and reason. When signals disagree, both sides are shown with their reasoning.
+                All data from <span className="text-white">True Markets API</span>. Refreshes every 30 seconds.
               </p>
             </div>
           </details>

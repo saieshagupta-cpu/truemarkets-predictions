@@ -137,8 +137,7 @@ export default function SignalBreakdown({ sentiment, indicators, weights, orderF
           ))}
         </div>
         <p className="text-[9px] text-tm-muted mt-2">
-          TCN model (80%+ accuracy) provides primary direction signal.
-          Order Flow + True Markets Sentiment + F&G + RSI inform the BUY/SELL recommendation.
+          Weights backtested on 2 years of daily BTC. See &ldquo;How it works&rdquo; for details.
         </p>
       </div>
     </div>
