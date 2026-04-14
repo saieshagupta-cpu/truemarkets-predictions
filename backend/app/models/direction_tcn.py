@@ -94,7 +94,11 @@ class DirectionTCNPredictor:
 
         if os.path.exists(model_path):
             try:
-                self.model = DirectionTCN(input_size=10, num_channels=48, num_layers=4)
+                # Detect feature count from norm params
+                n_feat = 15  # default: multi-timeframe
+                if self.norm_params:
+                    n_feat = self.norm_params.get("n_features", len(self.norm_params.get("means", [0]*15)))
+                self.model = DirectionTCN(input_size=n_feat, num_channels=48, num_layers=4)
                 self.model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
                 self.model.eval()
                 self.trained = True

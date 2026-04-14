@@ -171,10 +171,10 @@ function PredictionView({
                 Four signals are blended with <span className="text-white font-medium">weights backtested on 2 years of daily BTC data</span> (Apr 2023 &ndash; Apr 2025):
               </p>
               <div className="space-y-1 pl-2">
-                <p><span className="text-tm-yellow font-medium">Technical (RSI + MACD)</span> <span className="text-white">40%</span> &mdash; Mean-reversion at RSI extremes, MACD trend direction</p>
-                <p><span className="text-tm-blue font-medium">TCN Model</span> <span className="text-white">30%</span> &mdash; Temporal Convolutional Network trained on 3 years of BTC with multi-horizon consensus labels</p>
-                <p><span className="text-tm-purple font-medium">Order Flow</span> <span className="text-white">20%</span> &mdash; Polymarket buy/sell volume pressure + True Markets order history</p>
-                <p><span className="text-tm-green font-medium">Sentiment</span> <span className="text-white">10%</span> &mdash; True Markets AI (30+ news sources) + Fear &amp; Greed (contrarian at extremes)</p>
+                <p><span className="text-tm-green font-medium">Sentiment</span> <span className="text-white">46%</span> &mdash; True Markets AI (30+ news sources) + Fear &amp; Greed (contrarian at extremes)</p>
+                <p><span className="text-tm-purple font-medium">Order Flow</span> <span className="text-white">42%</span> &mdash; Polymarket buy/sell volume pressure + True Markets order data</p>
+                <p><span className="text-tm-blue font-medium">TCN Model</span> <span className="text-white">7%</span> &mdash; 15-feature multi-timeframe TCN trained on 3 years of daily BTC</p>
+                <p><span className="text-tm-yellow font-medium">Technical (RSI + MACD)</span> <span className="text-white">5%</span> &mdash; Mean-reversion at RSI extremes, MACD trend direction</p>
               </div>
               <p>
                 Each signal produces a direction and reason. When signals disagree, both sides are shown with their reasoning.

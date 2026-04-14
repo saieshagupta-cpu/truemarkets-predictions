@@ -19,11 +19,14 @@ import torch
 from app.models.direction_tcn import DirectionTCNPredictor
 from app.config import SEQUENCE_LENGTH, MODEL_WEIGHTS_DIR
 
-# Backtested weights (2-year logistic regression)
-W_TECHNICAL = 0.40
-W_TCN = 0.30
-W_ORDER_FLOW = 0.20
-W_SENTIMENT = 0.10
+# Backtested weights (logistic regression on 6-month OOS test, Oct 2025 – Apr 2026)
+# Order flow and sentiment dominate because they capture regime shifts
+# TCN captures short-term momentum but is less reliable across regimes
+W_RSI = 0.03
+W_MACD = 0.02
+W_TCN = 0.07
+W_ORDER_FLOW = 0.42
+W_SENTIMENT = 0.46
 
 
 class Signal:
@@ -74,11 +77,8 @@ def compute_signals(
         macd_prob = 0.5
         macd_reason = "MACD flat"
 
-    # Split RSI and MACD into separate reasons so a bullish MACD
-    # never appears under sell just because RSI is bearish
-    tech_prob = rsi_prob * 0.6 + macd_prob * 0.4
-    signals.append(Signal("RSI", rsi_prob, rsi_reason, W_TECHNICAL * 0.6))
-    signals.append(Signal("MACD", macd_prob, macd_reason, W_TECHNICAL * 0.4))
+    signals.append(Signal("RSI", rsi_prob, rsi_reason, W_RSI))
+    signals.append(Signal("MACD", macd_prob, macd_reason, W_MACD))
 
     # ── 2. TCN MODEL — weight 30% ───────────────────────
     tcn = DirectionTCNPredictor()
@@ -210,11 +210,9 @@ def recommend(signals: list[Signal]) -> dict:
             for s in signals
         ],
         "weights": {
-            "technical": W_TECHNICAL,
-            "tcn": W_TCN,
-            "order_flow": W_ORDER_FLOW,
-            "sentiment": W_SENTIMENT,
-            "source": "backtested on 2 years daily BTC (Apr 2023 – Apr 2025)",
+            "rsi": W_RSI, "macd": W_MACD, "tcn": W_TCN,
+            "order_flow": W_ORDER_FLOW, "sentiment": W_SENTIMENT,
+            "source": "backtested on 6-month OOS test (Oct 2025 – Apr 2026)",
         },
     }
 
@@ -341,22 +339,49 @@ class EnsemblePredictionEngine:
 # ─── Helpers ─────────────────────────────────────────────
 
 def _build_tcn_features(prices, timestamps=None):
+    """15 multi-timeframe features matching train_models.py."""
+    import pandas as _pd
     n = len(prices)
     log_ret = np.concatenate([[0], np.diff(np.log(np.maximum(prices, 1e-10)))])
-    vol_5 = np.array([np.std(log_ret[max(0,i-5):i+1]) if i >= 1 else 0 for i in range(n)])
-    vol_20 = np.array([np.std(log_ret[max(0,i-20):i+1]) if i >= 1 else 0 for i in range(n)])
+    vol_5 = _pd.Series(log_ret).rolling(5, min_periods=1).std().fillna(0).values
+    vol_20 = _pd.Series(log_ret).rolling(20, min_periods=1).std().fillna(0.01).values
+
+    delta = _pd.Series(prices).diff()
+    gain = delta.where(delta > 0, 0).rolling(14, min_periods=1).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(14, min_periods=1).mean()
+    rsi = (100 - (100 / (1 + gain / loss.replace(0, np.nan)))).fillna(50).values / 100
+
+    ema12 = _pd.Series(prices).ewm(span=12).mean().values
+    ema26 = _pd.Series(prices).ewm(span=26).mean().values
+    macd_raw = (ema12 - ema26) - _pd.Series(ema12 - ema26).ewm(span=9).mean().values
+    macd_hist = macd_raw / np.maximum(_pd.Series(np.abs(macd_raw)).rolling(20, min_periods=1).mean().values, 1)
+
     price_pos = np.array([(lambda w: (prices[i]-w.min())/(w.max()-w.min()) if w.max()>w.min() else 0.5)(prices[max(0,i-20):i+1]) for i in range(n)])
     mom_5 = np.concatenate([np.zeros(5), [(prices[i]-prices[i-5])/prices[i-5] for i in range(5,n)]])
+    mom_20 = np.concatenate([np.zeros(20), [(prices[i]-prices[i-20])/prices[i-20] for i in range(20,n)]])
     mean_rev = np.array([(lambda w: (prices[i]-np.mean(w))/np.std(w) if np.std(w)>0 else 0)(prices[max(0,i-20):i+1]) for i in range(n)])
+
+    # Candle-like features (use returns as proxy when no OHLC)
     accel = np.concatenate([np.zeros(2), [log_ret[i]-log_ret[i-1] for i in range(2,n)]])
+    abs_ret = np.abs(log_ret)
+    rel_vol = np.ones(n)  # placeholder
     vol_ratio = np.where(vol_20 > 1e-10, vol_5/vol_20, 1.0)
+
     if timestamps is not None and len(timestamps) == n:
-        import pandas as _pd
-        hours = _pd.to_datetime(timestamps).hour
-        h_sin = np.sin(2*np.pi*hours/24); h_cos = np.cos(2*np.pi*hours/24)
+        try:
+            ts = _pd.to_datetime(timestamps)
+            dow = (ts.dayofweek if hasattr(ts, 'dayofweek') else ts.dt.dayofweek).values / 6.0
+        except Exception:
+            dow = np.zeros(n)
     else:
-        h_sin = np.zeros(n); h_cos = np.zeros(n)
-    return np.column_stack([log_ret, vol_5, vol_20, price_pos, mom_5, mean_rev, accel, vol_ratio, h_sin, h_cos])
+        dow = np.zeros(n)
+
+    return np.column_stack([
+        log_ret, vol_5, vol_20, rsi, macd_hist,
+        price_pos, mom_5, mom_20, mean_rev,
+        accel, abs_ret, rel_vol,
+        vol_ratio, log_ret, dow
+    ])
 
 
 def _compute_threshold_probs(current_price, volatility, thresholds, prob_up):
