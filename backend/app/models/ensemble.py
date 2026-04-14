@@ -114,12 +114,12 @@ def compute_signals(
     of_prob = float(np.clip(of_prob, 0.2, 0.8))
 
     if of_pressure in ("strong_buy", "buy"):
-        of_reason = f"Polymarket: buy pressure (${up_vol:,.0f} upside vs ${dn_vol:,.0f} downside)"
+        of_reason = f"BTC order flow: buy pressure (${up_vol:,.0f} upside vs ${dn_vol:,.0f} downside)"
     elif of_pressure in ("strong_sell", "sell"):
-        of_reason = f"Polymarket: sell pressure (${dn_vol:,.0f} downside vs ${up_vol:,.0f} upside)"
+        of_reason = f"BTC order flow: sell pressure (${dn_vol:,.0f} downside vs ${up_vol:,.0f} upside)"
     else:
-        of_reason = f"Polymarket: neutral (signal={of_signal:.2f})"
-    signals.append(Signal("Polymarket", of_prob, of_reason, W_ORDER_FLOW))
+        of_reason = f"BTC order flow: neutral (signal={of_signal:.2f})"
+    signals.append(Signal("BTC Flow", of_prob, of_reason, W_ORDER_FLOW))
 
     # ── 4. SENTIMENT (TM AI + Fear & Greed) — weight 10% ─
     fg_value = fear_greed_data.get("current", {}).get("value", 50)

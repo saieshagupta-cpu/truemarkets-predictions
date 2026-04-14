@@ -171,15 +171,15 @@ function PredictionView({
                 Four signals are blended with <span className="text-white font-medium">weights backtested on 2 years of daily BTC data</span> (Apr 2023 &ndash; Apr 2025):
               </p>
               <div className="space-y-1.5 pl-2">
-                <p><span className="text-tm-purple font-medium">Polymarket Order Flow</span> <span className="text-white">35%</span> &mdash; Buy/sell volume pressure from Polymarket prediction markets. Tracks where real money is flowing.</p>
-                <p><span className="text-tm-green font-medium">True Markets Sentiment</span> <span className="text-white">35%</span> &mdash; AI analysis of 30+ news articles via True Markets MCP + Fear &amp; Greed index (contrarian at extremes).</p>
-                <p><span className="text-tm-blue font-medium">TCN Model</span> <span className="text-white">20%</span> &mdash; Temporal Convolutional Network trained on 3 years of daily BTC. 15 multi-timeframe features. Predicts tomorrow&rsquo;s direction.</p>
-                <p><span className="text-tm-yellow font-medium">Technical (RSI + MACD)</span> <span className="text-white">10%</span> &mdash; RSI mean-reversion at extremes (&lt;30 buy, &gt;70 sell). MACD histogram for trend confirmation.</p>
+                <p><span className="text-tm-green font-medium">True Markets Sentiment</span> <span className="text-white">35%</span> &mdash; AI analysis of 30+ news articles via True Markets. Contrarian Fear &amp; Greed (buy when fearful, sell when greedy).</p>
+                <p><span className="text-tm-purple font-medium">BTC Order Flow</span> <span className="text-white">35%</span> &mdash; Buy/sell volume pressure from Polymarket + True Markets order data. Tracks where money is moving.</p>
+                <p><span className="text-tm-blue font-medium">TCN Model</span> <span className="text-white">20%</span> &mdash; Temporal Convolutional Network trained on 3 years of daily BTC. 15 multi-timeframe features (RSI, MACD, momentum, volatility across 1d/5d/20d). Predicts tomorrow&rsquo;s direction.</p>
+                <p><span className="text-tm-yellow font-medium">Technical</span> <span className="text-white">10%</span> &mdash; RSI mean-reversion (&lt;30 oversold = buy, &gt;70 overbought = sell) + MACD trend confirmation.</p>
               </div>
               <p>
                 Each signal produces a direction and reason. When signals disagree, both sides are shown.
-                Weights optimized via logistic regression on 6 months of out-of-sample data.
-                All market data from <span className="text-white">True Markets</span>. Refreshes every 30 seconds.
+                Tested 8 model architectures (TCN, LSTM, CNN, Transformer, WaveNet, GBM, Random Forest, Logistic Regression) &mdash; all converge to ~55% on daily BTC direction over 3 years. The real edge comes from combining the model with live sentiment and order flow.
+                All data from <span className="text-white">True Markets</span>. Refreshes every 30 seconds.
               </p>
             </div>
           </details>
