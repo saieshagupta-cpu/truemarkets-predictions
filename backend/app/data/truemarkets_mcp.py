@@ -129,8 +129,37 @@ def _iso_to_ms(iso_str: str) -> int:
 
 
 async def fetch_current_price(symbol: str = "BTC") -> dict:
-    """Get current price from cache."""
+    """Get current price — tries live TrueMarkets API first, falls back to cache."""
     symbol = _coin_id_to_symbol(symbol)
+
+    # Priority 1: Live TrueMarkets quote (no auth needed!)
+    if symbol == "BTC":
+        try:
+            import cloudscraper
+            s = cloudscraper.create_scraper()
+            buy = s.post("https://api.truemarkets.co/v1/conductor/quotes", json={
+                "base_asset": "BTC", "quote_asset": "USDC",
+                "qty": "100", "qty_unit": "quote", "side": "buy"
+            }, timeout=5).json()
+            sell = s.post("https://api.truemarkets.co/v1/conductor/quotes", json={
+                "base_asset": "BTC", "quote_asset": "USDC",
+                "qty": "100", "qty_unit": "quote", "side": "sell"
+            }, timeout=5).json()
+            mid_price = (float(buy["price"]) + float(sell["price"])) / 2
+
+            # Get 24h change from cache
+            data = await _fetch_price_data(symbol, "1d", "1h")
+            points = _points_from_cache_or_api(data)
+            first_price = float(points[0]["price"]) if points else mid_price
+            change = ((mid_price - first_price) / first_price * 100) if first_price > 0 else 0
+
+            return {"price": round(mid_price, 2), "change_24h": round(change, 2),
+                    "market_cap": round(mid_price * 19_850_000), "volume_24h": 0,
+                    "source": "truemarkets_live"}
+        except Exception:
+            pass  # Fall through to cache
+
+    # Priority 2: Cache
     data = await _fetch_price_data(symbol, "1d", "1h")
     points = _points_from_cache_or_api(data)
     if points:

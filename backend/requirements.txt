@@ -9,3 +9,4 @@ torch>=2.6.0
 vaderSentiment>=3.3.2
 python-dotenv>=1.0.0
 PyJWT[crypto]>=2.8.0
+cloudscraper>=1.2.71
