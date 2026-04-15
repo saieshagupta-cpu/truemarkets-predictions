@@ -23,14 +23,14 @@ export default function MispricingSignals({ signals, currentPrice, symbol, hasPo
         <p className="text-xs text-tm-muted leading-relaxed">
           {hasPolymarket ? (
             <>
-              Side-by-side comparison of our <span className="text-tm-accent">TCN prediction model</span> vs
+              Side-by-side comparison of our <span className="text-tm-accent">GRU + XGBoost ensemble</span> vs
               <span className="text-tm-blue"> Polymarket</span> crowd predictions.
               Both estimate the probability of {symbol} reaching each price target within 30 days.
             </>
           ) : (
             <>
-              Our TCN model estimates the probability that {symbol} reaches each price target within 30 days.
-              Based on 3 years of price patterns, volatility, and True Markets sentiment.
+              Our ensemble model estimates the probability that {symbol} reaches each price target within 30 days.
+              Based on 5 years of price patterns, on-chain data, and True Markets sentiment.
             </>
           )}
         </p>
@@ -103,11 +103,9 @@ function ComparisonRow({ signal, symbol }: { signal: MispricingSignal; symbol: s
         </div>
       </div>
 
-      {/* Model breakdown */}
-      <div className="flex gap-3 text-[10px] text-tm-muted">
-        <span>LSTM: <span className="text-tm-blue">{Math.round(signal.model_signals.lstm * 100)}%</span></span>
-        <span>XGBoost: <span className="text-tm-yellow">{Math.round(signal.model_signals.xgboost * 100)}%</span></span>
-        <span>Sentiment: <span className="text-tm-purple">{Math.round(signal.model_signals.sentiment * 100)}%</span></span>
+      {/* Model info */}
+      <div className="text-[10px] text-tm-muted">
+        <span>GRU + XGBoost agreement ensemble (61.2% OOS)</span>
       </div>
     </div>
   );

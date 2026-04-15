@@ -168,18 +168,16 @@ function PredictionView({
             </summary>
             <div className="px-4 pb-3 text-[11px] text-tm-muted border-t border-tm-border pt-2 space-y-2">
               <p>
-                Four signals are blended with <span className="text-white font-medium">weights backtested on 2 years of daily BTC data</span> (Apr 2023 &ndash; Apr 2025):
+                <span className="text-white font-medium">Agreement-based ensemble</span> &mdash; trades only when models agree. Backtested on 500 OOS days (Oct 2024 &ndash; Apr 2026):
               </p>
               <div className="space-y-1.5 pl-2">
-                <p><span className="text-tm-purple font-medium">BTC Momentum</span> <span className="text-white">31%</span> &mdash; Pure BTC price momentum and acceleration derived from True Markets price data.</p>
-                <p><span className="text-tm-red font-medium">Polymarket</span> <span className="text-white">26%</span> &mdash; Prediction market odds for BTC targets. Contrarian signal (crowds often wrong at extremes).</p>
-                <p><span className="text-tm-yellow font-medium">RSI</span> <span className="text-white">22%</span> &mdash; Mean-reversion at extremes (&lt;30 oversold = buy, &gt;70 overbought = sell). Best individual signal (53.1%).</p>
-                <p><span className="text-tm-green font-medium">True Markets Sentiment</span> <span className="text-white">16%</span> &mdash; AI analysis of 30+ news articles + contrarian Fear &amp; Greed.</p>
-                <p><span className="text-tm-yellow font-medium">MACD</span> <span className="text-white">3%</span> &mdash; Trend confirmation.</p>
-                <p><span className="text-tm-blue font-medium">CNN-LSTM + Boruta</span> <span className="text-white">6%</span> &mdash; Conv1D → LSTM hybrid (Dubey &amp; Enke 2025) with Boruta feature selection. 53.2% test accuracy on 400 OOS days.</p>
+                <p><span className="text-tm-green font-medium">GRU</span> <span className="text-white">45%</span> &mdash; 2-layer GRU (100 units) analyzing 30-day price sequences. 56.9% standalone accuracy.</p>
+                <p><span className="text-tm-yellow font-medium">XGBoost</span> <span className="text-white">35%</span> &mdash; Regime indicators (RSI, MACD, F&amp;G, mean-reversion, trend strength, streaks). 54.6% accuracy.</p>
+                <p><span className="text-tm-purple font-medium">Sentiment</span> <span className="text-white">20%</span> &mdash; Contrarian Fear &amp; Greed + True Markets AI. 55.7% at extremes.</p>
               </div>
-              <p>
-                Each signal produces a direction and reason. When signals disagree, both sides are shown.
+              <p className="pt-1">
+                When <span className="text-white">GRU + XGBoost agree</span> (49% of days): <span className="text-tm-green font-medium">61.2% accuracy</span>. When they disagree, the system abstains.
+                Strategy return: <span className="text-tm-green">+23.8%</span> vs Buy &amp; Hold <span className="text-tm-red">-26.0%</span>.
                 All data from <span className="text-white">True Markets</span>. Refreshes every 30 seconds.
               </p>
             </div>
