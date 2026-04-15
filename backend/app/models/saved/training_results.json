@@ -1,0 +1,73 @@
+{
+  "model": "CNN-LSTM + XGBoost + Meta-Learner (v2)",
+  "horizon": 3,
+  "base_rate": 0.515015015015015,
+  "cnn_lstm": {
+    "test_accuracy": 0.538,
+    "features": [
+      "vol_5",
+      "vol_10",
+      "mom_1",
+      "mom_10",
+      "price_pos_20",
+      "price_scaled",
+      "vol_change",
+      "oc_miners_revenue",
+      "oc_mempool_size",
+      "oc_hash_rate_mom",
+      "oc_miners_revenue_mom",
+      "oc_active_addresses_mom"
+    ],
+    "n_features": 12
+  },
+  "xgboost": {
+    "test_accuracy": 0.546,
+    "features": [
+      "rsi",
+      "macd_hist",
+      "fear_greed",
+      "fg_momentum",
+      "vol_regime",
+      "mean_rev_z",
+      "trend_strength",
+      "streak",
+      "day_of_week",
+      "rsi_oversold",
+      "rsi_overbought",
+      "down_streak_3",
+      "hour_of_day"
+    ],
+    "best_params": {
+      "n_estimators": 100,
+      "max_depth": 3,
+      "lr": 0.05
+    }
+  },
+  "sentiment": {
+    "test_accuracy": 0.52
+  },
+  "gru": {
+    "test_accuracy": 0.5691056847572327
+  },
+  "meta_learner": {
+    "test_accuracy": 0.504,
+    "with_abstention": 0.5163934426229508,
+    "abstention_threshold": 0.08
+  },
+  "abstention_threshold": 0.08,
+  "test_n": 500,
+  "selected_features": [
+    "vol_5",
+    "vol_10",
+    "mom_1",
+    "mom_10",
+    "price_pos_20",
+    "price_scaled",
+    "vol_change",
+    "oc_miners_revenue",
+    "oc_mempool_size",
+    "oc_hash_rate_mom",
+    "oc_miners_revenue_mom",
+    "oc_active_addresses_mom"
+  ]
+}

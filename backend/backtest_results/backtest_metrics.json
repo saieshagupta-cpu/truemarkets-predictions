@@ -1,6 +1,20 @@
 {
-  "test_accuracy": 0.46368715083798884,
-  "test_n": 179,
-  "tcn_cumulative_return": -0.225497918321254,
-  "buyhold_return": -0.34057020846607533
+  "test_n": 500,
+  "horizon_days": 3,
+  "base_rate": 0.492,
+  "gru_accuracy": 0.564,
+  "cnn_lstm_accuracy": 0.492,
+  "xgboost_accuracy": 0.546,
+  "sentiment_accuracy": 0.512,
+  "agree_accuracy": 0.6122448979591837,
+  "agree_coverage": 0.49,
+  "triple_agree_accuracy": 0.6453900709219859,
+  "triple_agree_coverage": 0.282,
+  "agree_extreme_fg_accuracy": 0.65625,
+  "top40_confidence_accuracy": 0.6836734693877551,
+  "strategy_return": 0.23770269371592834,
+  "buyhold_return": -0.26048137558937823,
+  "outperformance": 0.49818406930530656,
+  "sharpe_ratio": 0.5433131495521236,
+  "max_drawdown": 0.22209790116550643
 }
