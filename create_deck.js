@@ -101,9 +101,67 @@ s7.addText("Top 10 Features", { x: 0.7, y: 0.3, w: 6, h: 0.5, fontSize: 30, font
 s7.addText("Rate-of-change features dominate \u2014 the key innovation", { x: 0.7, y: 0.8, w: 8, h: 0.3, fontSize: 14, fontFace: "Arial", color: MUTED, margin: 0 });
 s7.addImage({ data: "image/png;base64," + img("features.png").toString("base64"), x: 0.3, y: 1.2, w: 9.4, h: 4.0 });
 
-// ═══ SLIDE 8: Tech Stack ═══
+// ═══ SLIDE 8: All Models Tested ═══
 let s8 = darkSlide();
-s8.addText("Tech Stack", { x: 0.7, y: 0.4, w: 8, h: 0.6, fontSize: 36, fontFace: "Arial Black", color: WHITE, bold: true, margin: 0 });
+s8.addText("All Models Tested", { x: 0.7, y: 0.3, w: 6, h: 0.5, fontSize: 30, fontFace: "Arial Black", color: WHITE, bold: true, margin: 0 });
+s8.addText("12 model configurations compared on OOS BTC direction prediction", { x: 0.7, y: 0.8, w: 8, h: 0.3, fontSize: 13, fontFace: "Arial", color: MUTED, margin: 0 });
+s8.addImage({ data: "image/png;base64," + img("all_models.png").toString("base64"), x: 0.2, y: 1.1, w: 9.6, h: 4.3 });
+
+// ═══ SLIDE 9: Where It Goes From Here ═══
+let s9r = darkSlide();
+s9r.addText("Where It Goes From Here", { x: 0.7, y: 0.3, w: 8, h: 0.6, fontSize: 32, fontFace: "Arial Black", color: WHITE, bold: true, margin: 0 });
+
+// Left: Next steps
+s9r.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.7, y: 1.1, w: 4.3, h: 4.2, fill: { color: CARD }, rectRadius: 0.1 });
+s9r.addText("Next Steps", { x: 0.9, y: 1.2, w: 3.5, h: 0.35, fontSize: 16, fontFace: "Arial", color: GREEN, bold: true, margin: 0 });
+
+const steps = [
+  { label: "Glassnode Pro (87 features)", desc: "Paper achieves 82.44% with full Glassnode data. We have 42 features from BGeometrics. More data = higher accuracy.", color: GREEN },
+  { label: "CNN-LSTM architecture", desc: "Omole & Enke 2024 CNN-LSTM with 87 Glassnode features reached 82.44%. Our GradientBoosting at 67.4% is limited by data, not architecture.", color: ACCENT },
+  { label: "Expand to ETH, SOL", desc: "Same 6-signal architecture per coin. BGeometrics supports ETH on-chain. Polymarket has ETH/SOL markets.", color: BLUE },
+  { label: "Hourly predictions", desc: "Currently daily. With Glassnode hourly data, can predict intraday moves for higher-frequency trading.", color: YELLOW },
+];
+steps.forEach((s, i) => {
+  const y = 1.65 + i * 0.85;
+  s9r.addShape(pres.shapes.OVAL, { x: 0.95, y: y + 0.05, w: 0.15, h: 0.15, fill: { color: s.color } });
+  s9r.addText(s.label, { x: 1.25, y, w: 3.5, h: 0.25, fontSize: 12, fontFace: "Arial", color: WHITE, bold: true, margin: 0 });
+  s9r.addText(s.desc, { x: 1.25, y: y + 0.28, w: 3.5, h: 0.5, fontSize: 10, fontFace: "Arial", color: MUTED, margin: 0 });
+});
+
+// Right: The data gap
+s9r.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 5.3, y: 1.1, w: 4.3, h: 4.2, fill: { color: CARD }, rectRadius: 0.1 });
+s9r.addText("The Data Gap", { x: 5.5, y: 1.2, w: 3.5, h: 0.35, fontSize: 16, fontFace: "Arial", color: YELLOW, bold: true, margin: 0 });
+
+s9r.addText("Current", { x: 5.5, y: 1.7, w: 1.5, h: 0.25, fontSize: 11, fontFace: "Arial", color: MUTED, bold: true, margin: 0 });
+s9r.addText("67.4%", { x: 7.5, y: 1.7, w: 1.8, h: 0.25, fontSize: 14, fontFace: "Arial", color: GREEN, bold: true, align: "right", margin: 0 });
+s9r.addText("42 features from BGeometrics", { x: 5.5, y: 1.95, w: 4, h: 0.2, fontSize: 10, fontFace: "Arial", color: MUTED, margin: 0 });
+
+s9r.addShape(pres.shapes.LINE, { x: 5.5, y: 2.3, w: 3.8, h: 0, line: { color: BORDER, width: 1 } });
+
+s9r.addText("Target", { x: 5.5, y: 2.5, w: 1.5, h: 0.25, fontSize: 11, fontFace: "Arial", color: MUTED, bold: true, margin: 0 });
+s9r.addText("82.4%", { x: 7.5, y: 2.5, w: 1.8, h: 0.25, fontSize: 14, fontFace: "Arial", color: YELLOW, bold: true, align: "right", margin: 0 });
+s9r.addText("87 features from Glassnode Pro ($799/mo)", { x: 5.5, y: 2.75, w: 4, h: 0.2, fontSize: 10, fontFace: "Arial", color: MUTED, margin: 0 });
+
+s9r.addShape(pres.shapes.LINE, { x: 5.5, y: 3.1, w: 3.8, h: 0, line: { color: BORDER, width: 1 } });
+
+s9r.addText("What\u2019s missing:", { x: 5.5, y: 3.3, w: 4, h: 0.25, fontSize: 11, fontFace: "Arial", color: WHITE, bold: true, margin: 0 });
+const missing = [
+  "HODL waves (all 15 age bands vs our 13)",
+  "Realized cap HODL waves",
+  "Entity-adjusted dormancy flow",
+  "Stock-to-flow ratio",
+  "Difficulty ribbon compression",
+  "45 additional on-chain indicators",
+];
+missing.forEach((m, i) => {
+  s9r.addText("\u2022 " + m, { x: 5.7, y: 3.6 + i * 0.25, w: 3.8, h: 0.22, fontSize: 9, fontFace: "Arial", color: MUTED, margin: 0 });
+});
+
+s9r.addText("More data is the single biggest lever to improve accuracy.", { x: 5.5, y: 5.0, w: 3.8, h: 0.2, fontSize: 9, fontFace: "Arial", color: YELLOW, italic: true, margin: 0 });
+
+// ═══ SLIDE 10: Tech Stack ═══
+let s10 = darkSlide();
+s10.addText("Tech Stack", { x: 0.7, y: 0.4, w: 8, h: 0.6, fontSize: 36, fontFace: "Arial Black", color: WHITE, bold: true, margin: 0 });
 [
   { c: "Backend", i: "FastAPI + Python, scikit-learn, PyTorch", cl: GREEN },
   { c: "Frontend", i: "Next.js 14, React 18, TailwindCSS", cl: BLUE },
@@ -112,27 +170,27 @@ s8.addText("Tech Stack", { x: 0.7, y: 0.4, w: 8, h: 0.6, fontSize: 36, fontFace:
   { c: "Refresh", i: "30 seconds, all 6 signals", cl: RED },
 ].forEach((s, i) => {
   const y = 1.2 + i * 0.8;
-  s8.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.7, y, w: 8.6, h: 0.65, fill: { color: CARD }, rectRadius: 0.08 });
-  s8.addShape(pres.shapes.RECTANGLE, { x: 0.7, y, w: 0.06, h: 0.65, fill: { color: s.cl } });
-  s8.addText(s.c, { x: 1.1, y: y+0.05, w: 2, h: 0.3, fontSize: 15, fontFace: "Arial", color: WHITE, bold: true, margin: 0 });
-  s8.addText(s.i, { x: 1.1, y: y+0.33, w: 7.5, h: 0.25, fontSize: 12, fontFace: "Arial", color: MUTED, margin: 0 });
+  s10.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.7, y, w: 8.6, h: 0.65, fill: { color: CARD }, rectRadius: 0.08 });
+  s10.addShape(pres.shapes.RECTANGLE, { x: 0.7, y, w: 0.06, h: 0.65, fill: { color: s.cl } });
+  s10.addText(s.c, { x: 1.1, y: y+0.05, w: 2, h: 0.3, fontSize: 15, fontFace: "Arial", color: WHITE, bold: true, margin: 0 });
+  s10.addText(s.i, { x: 1.1, y: y+0.33, w: 7.5, h: 0.25, fontSize: 12, fontFace: "Arial", color: MUTED, margin: 0 });
 });
 
-// ═══ SLIDE 9: Product ═══
-let s9 = darkSlide();
-s9.addText("The Product", { x: 0.7, y: 0.4, w: 8, h: 0.6, fontSize: 36, fontFace: "Arial Black", color: WHITE, bold: true, margin: 0 });
-s9.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.7, y: 1.2, w: 4.1, h: 3.8, fill: { color: CARD }, rectRadius: 0.1 });
-s9.addText("Market Page", { x: 0.9, y: 1.3, w: 3.5, h: 0.4, fontSize: 18, fontFace: "Arial", color: GREEN, bold: true, margin: 0 });
-s9.addText([
+// ═══ SLIDE 11: Product ═══
+let s11 = darkSlide();
+s11.addText("The Product", { x: 0.7, y: 0.4, w: 8, h: 0.6, fontSize: 36, fontFace: "Arial Black", color: WHITE, bold: true, margin: 0 });
+s11.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.7, y: 1.2, w: 4.1, h: 3.8, fill: { color: CARD }, rectRadius: 0.1 });
+s11.addText("Market Page", { x: 0.9, y: 1.3, w: 3.5, h: 0.4, fontSize: 18, fontFace: "Arial", color: GREEN, bold: true, margin: 0 });
+s11.addText([
   { text: "Live BTC price + chart", options: { bullet: true, breakLine: true } },
   { text: "Market cap, volume, highs/lows", options: { bullet: true, breakLine: true } },
   { text: "Fear & Greed Index", options: { bullet: true, breakLine: true } },
   { text: "TM Sentiment (30+ sources)", options: { bullet: true } },
 ], { x: 0.9, y: 1.8, w: 3.7, h: 2.5, fontSize: 12, fontFace: "Arial", color: LIGHT });
 
-s9.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 5.2, y: 1.2, w: 4.3, h: 3.8, fill: { color: CARD }, rectRadius: 0.1 });
-s9.addText("Prediction Page", { x: 5.4, y: 1.3, w: 3.5, h: 0.4, fontSize: 18, fontFace: "Arial", color: ACCENT, bold: true, margin: 0 });
-s9.addText([
+s11.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 5.2, y: 1.2, w: 4.3, h: 3.8, fill: { color: CARD }, rectRadius: 0.1 });
+s11.addText("Prediction Page", { x: 5.4, y: 1.3, w: 3.5, h: 0.4, fontSize: 18, fontFace: "Arial", color: ACCENT, bold: true, margin: 0 });
+s11.addText([
   { text: "BUY / SELL with 6-signal reasoning", options: { bullet: true, breakLine: true } },
   { text: "Polymarket table (18 thresholds)", options: { bullet: true, breakLine: true } },
   { text: "Binance order flow visualization", options: { bullet: true, breakLine: true } },
@@ -140,13 +198,13 @@ s9.addText([
   { text: "Portfolio + order management", options: { bullet: true } },
 ], { x: 5.4, y: 1.8, w: 3.9, h: 2.5, fontSize: 12, fontFace: "Arial", color: LIGHT });
 
-// ═══ SLIDE 10: The Ask ═══
-let s10 = darkSlide();
-s10.addText("The Ask", { x: 0.7, y: 0.4, w: 8, h: 0.6, fontSize: 36, fontFace: "Arial Black", color: WHITE, bold: true, margin: 0 });
-s10.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.7, y: 1.2, w: 4, h: 1.5, fill: { color: CARD }, rectRadius: 0.1 });
-s10.addText("$500K", { x: 0.9, y: 1.3, w: 3.5, h: 0.6, fontSize: 40, fontFace: "Arial Black", color: GREEN, bold: true, margin: 0 });
-s10.addText("at $5M valuation", { x: 0.9, y: 1.9, w: 3.5, h: 0.3, fontSize: 16, fontFace: "Arial", color: MUTED, margin: 0 });
-s10.addText("Use of Funds", { x: 0.7, y: 3.0, w: 8, h: 0.4, fontSize: 18, fontFace: "Arial", color: WHITE, bold: true, margin: 0 });
+// ═══ SLIDE 12: The Ask ═══
+let s12 = darkSlide();
+s12.addText("The Ask", { x: 0.7, y: 0.4, w: 8, h: 0.6, fontSize: 36, fontFace: "Arial Black", color: WHITE, bold: true, margin: 0 });
+s12.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.7, y: 1.2, w: 4, h: 1.5, fill: { color: CARD }, rectRadius: 0.1 });
+s12.addText("$500K", { x: 0.9, y: 1.3, w: 3.5, h: 0.6, fontSize: 40, fontFace: "Arial Black", color: GREEN, bold: true, margin: 0 });
+s12.addText("at $5M valuation", { x: 0.9, y: 1.9, w: 3.5, h: 0.3, fontSize: 16, fontFace: "Arial", color: MUTED, margin: 0 });
+s12.addText("Use of Funds", { x: 0.7, y: 3.0, w: 8, h: 0.4, fontSize: 18, fontFace: "Arial", color: WHITE, bold: true, margin: 0 });
 [
   { i: "Glassnode Pro ($799/mo)", d: "87 features \u2192 target 82%+ accuracy", c: GREEN },
   { i: "Expand to ETH, SOL, top 10", d: "Same architecture, per-coin models", c: BLUE },
@@ -154,9 +212,9 @@ s10.addText("Use of Funds", { x: 0.7, y: 3.0, w: 8, h: 0.4, fontSize: 18, fontFa
   { i: "Team: ML eng + full-stack", d: "Scale infra, more data sources", c: YELLOW },
 ].forEach((f, i) => {
   const y = 3.5 + i * 0.45;
-  s10.addShape(pres.shapes.OVAL, { x: 0.9, y: y+0.08, w: 0.18, h: 0.18, fill: { color: f.c } });
-  s10.addText(f.i, { x: 1.3, y, w: 4, h: 0.25, fontSize: 13, fontFace: "Arial", color: WHITE, bold: true, margin: 0 });
-  s10.addText(f.d, { x: 5.5, y, w: 4, h: 0.25, fontSize: 11, fontFace: "Arial", color: MUTED, margin: 0 });
+  s12.addShape(pres.shapes.OVAL, { x: 0.9, y: y+0.08, w: 0.18, h: 0.18, fill: { color: f.c } });
+  s12.addText(f.i, { x: 1.3, y, w: 4, h: 0.25, fontSize: 13, fontFace: "Arial", color: WHITE, bold: true, margin: 0 });
+  s12.addText(f.d, { x: 5.5, y, w: 4, h: 0.25, fontSize: 11, fontFace: "Arial", color: MUTED, margin: 0 });
 });
 
 pres.writeFile({ fileName: path.join(__dirname, "TrueMarkets_Pitch_Deck.pptx") })
