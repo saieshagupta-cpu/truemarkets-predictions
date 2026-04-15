@@ -1,40 +1,8 @@
 {
-  "weights": {
-    "TM_Sentiment": 0.1467,
-    "BTC_Momentum": 0.1657,
-    "CNN_LSTM": 0.0521,
-    "RSI": 0.2257,
-    "MACD": 0.0927,
-    "Polymarket": 0.2942,
-    "30day_Model": 0.0229
-  },
-  "model": "CNN-LSTM+Boruta+OnChain",
-  "cnn_lstm_acc": 0.505,
-  "gru_acc": 0.5360824465751648,
-  "combined_acc": 0.545,
-  "test_n": 400,
-  "selected_features": [
-    "mom_5",
-    "vol_change",
-    "vol_ratio",
-    "accel",
-    "price_scaled",
-    "oc_hash_rate",
-    "oc_n_transactions",
-    "oc_difficulty",
-    "oc_miners_revenue",
-    "oc_avg_block_size",
-    "oc_active_addresses",
-    "oc_mempool_size"
-  ],
-  "on_chain_features": [
-    "oc_hash_rate",
-    "oc_n_transactions",
-    "oc_difficulty",
-    "oc_miners_revenue",
-    "oc_avg_block_size",
-    "oc_active_addresses",
-    "oc_tx_volume_usd",
-    "oc_mempool_size"
-  ]
+  "polymarket": 0.20,
+  "order_flow": 0.15,
+  "lightgbm": 0.20,
+  "technical": 0.20,
+  "sentiment": 0.10,
+  "fear_greed": 0.15
 }

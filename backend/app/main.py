@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router, _cache, _chart_cache, _tm_data
-from app.data.truemarkets_mcp import fetch_current_price, _fetch_price_data
+from app.data.truemarkets_mcp import fetch_current_price
 from app.config import FRONTEND_URL
 
 logger = logging.getLogger("truemarkets")
@@ -14,7 +14,7 @@ _refresh_task = None
 
 
 async def _refresh_loop():
-    """Background loop: refresh BTC price from cache and clear endpoint caches every 30 seconds."""
+    """Background: refresh BTC price + clear caches every 30 seconds."""
     while True:
         try:
             price_data = await fetch_current_price("BTC")
@@ -30,9 +30,8 @@ async def _refresh_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start background refresh on startup."""
     global _refresh_task
-    logger.info("TCN model trained on 3 years daily data (loaded from saved weights)")
+    logger.info("Prediction engine started — 6 signals, GradientBoosting model loaded")
     _refresh_task = asyncio.create_task(_refresh_loop())
     yield
     if _refresh_task:
@@ -45,8 +44,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="True Markets Prediction Engine",
-    description="TCN next-day direction prediction + backtested signal ensemble for BTC",
-    version="2.0.0",
+    description="6-signal BTC prediction: Polymarket, Binance Order Flow, GradientBoosting, Technical, Sentiment, Fear & Greed",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -64,9 +63,8 @@ app.include_router(router, prefix="/api")
 @app.get("/")
 async def root():
     return {
-        "name": "True Markets Prediction Engine",
-        "model": "TCN trained on 3 years daily BTC (58.6% test accuracy)",
-        "prediction": "Next-day BTC direction",
-        "signals": ["RSI (24%)", "TCN (30%)", "MACD (16%)", "Order Flow (20%)", "Sentiment (10%)"],
+        "name": "True Markets Prediction Engine v3",
+        "model": "GradientBoosting (35 features, 3-day horizon, 52.6% test accuracy)",
+        "signals": ["Polymarket (20%)", "Binance Order Flow (15%)", "GradientBoosting (20%)", "Technical (20%)", "TM Sentiment (10%)", "Fear & Greed (15%)"],
         "refresh": "every 30 seconds",
     }

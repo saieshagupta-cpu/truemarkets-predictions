@@ -1,92 +1,73 @@
+"""
+Polymarket scraper for BTC April 2026 price thresholds.
+Source: Gamma API (public, no auth).
+Endpoint: GET gamma-api.polymarket.com/events?slug=what-price-will-bitcoin-hit-in-april-2026
+"""
+
+import re
 import json
 import httpx
-from app.config import POLYMARKET_GAMMA_BASE
-
-# Known event slugs for price prediction markets
-KNOWN_SLUGS = {
-    "bitcoin": "what-price-will-bitcoin-hit-before-2027",
-    "ethereum": None,
-    "solana": None,
-    "hyperliquid": None,
-    "coinbase-wrapped-btc": "what-price-will-bitcoin-hit-before-2027",
-}
+from app.config import POLYMARKET_GAMMA_BASE, POLYMARKET_APRIL_SLUG
 
 
-async def fetch_polymarket_markets(coin: str = "bitcoin", keywords: list[str] | None = None) -> list[dict]:
-    """Fetch prediction markets for a given coin from Polymarket."""
-    slug = KNOWN_SLUGS.get(coin)
-    if slug:
-        result = await _fetch_by_slug(slug)
-        if result:
-            return result
-
-    # Fallback: search events by keyword
-    if keywords:
-        return await _search_events(keywords)
-    return []
-
-
-async def _fetch_by_slug(slug: str) -> list[dict]:
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(f"{POLYMARKET_GAMMA_BASE}/events", params={"slug": slug})
-        if resp.status_code != 200 or not resp.json():
-            return []
-        return _parse_markets(resp.json()[0].get("markets", []))
-
-
-async def _search_events(keywords: list[str]) -> list[dict]:
-    async with httpx.AsyncClient(timeout=15) as client:
-        for offset in range(0, 500, 100):
+async def fetch_polymarket_thresholds() -> list[dict]:
+    """
+    Fetch all BTC price threshold markets from the April 2026 event.
+    Returns list sorted by threshold ascending.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 f"{POLYMARKET_GAMMA_BASE}/events",
-                params={"closed": "false", "limit": 100, "offset": offset},
+                params={"slug": POLYMARKET_APRIL_SLUG, "closed": "false"},
             )
-            if resp.status_code != 200:
+            resp.raise_for_status()
+            events = resp.json()
+
+        if not events:
+            return []
+
+        event = events[0] if isinstance(events, list) else events
+        markets = event.get("markets", [])
+        if not markets:
+            return []
+
+        results = []
+        for m in markets:
+            question = m.get("question", "")
+            match = re.search(r'\$?([\d,]+)', question)
+            if not match:
                 continue
-            for event in resp.json():
-                title = event.get("title", "").lower()
-                if any(kw in title for kw in keywords) and "price" in title:
-                    markets = event.get("markets", [])
-                    if markets:
-                        return _parse_markets(markets)
-    return []
+            threshold = int(match.group(1).replace(",", ""))
 
+            outcome_prices = m.get("outcomePrices", "[]")
+            if isinstance(outcome_prices, str):
+                try:
+                    outcome_prices = json.loads(outcome_prices)
+                except Exception:
+                    outcome_prices = [0.5, 0.5]
+            yes_price = float(outcome_prices[0]) if outcome_prices else 0.5
 
-def _parse_markets(markets: list[dict]) -> list[dict]:
-    result = []
-    for m in markets:
-        op = m.get("outcomePrices", [])
-        if isinstance(op, str):
-            try:
-                op = json.loads(op)
-            except (json.JSONDecodeError, TypeError):
-                op = []
-        prices = [float(p) for p in op] if op else []
+            q_lower = question.lower()
+            if "dip" in q_lower or "drop" in q_lower or "fall" in q_lower or "below" in q_lower:
+                direction = "down"
+            else:
+                direction = "up"
 
-        oc = m.get("outcomes", [])
-        if isinstance(oc, str):
-            try:
-                oc = json.loads(oc)
-            except (json.JSONDecodeError, TypeError):
-                oc = []
+            results.append({
+                "threshold": threshold,
+                "direction": direction,
+                "yes_price": round(yes_price, 4),
+                "yes_pct": round(yes_price * 100, 1),
+                "volume": float(m.get("volume", 0)),
+                "volume_24h": float(m.get("volume24hr", 0) or 0),
+                "question": question,
+                "liquidity": float(m.get("liquidity", 0) or 0),
+            })
 
-        result.append({
-            "question": m.get("question", ""),
-            "outcomes": oc,
-            "prices": prices,
-            "yes_price": prices[0] if prices else 0,
-            "volume": float(m.get("volume", 0)),
-            "liquidity": float(m.get("liquidity", 0) or 0),
-            "end_date": m.get("endDate", ""),
-            # Order flow fields
-            "volume24hr": float(m.get("volume24hr", 0) or 0),
-            "volume1wk": float(m.get("volume1wk", 0) or 0),
-            "volume1mo": float(m.get("volume1mo", 0) or 0),
-            "bestBid": float(m.get("bestBid", 0) or 0),
-            "bestAsk": float(m.get("bestAsk", 0) or 0),
-            "spread": float(m.get("spread", 0) or 0),
-            "oneDayPriceChange": float(m.get("oneDayPriceChange", 0) or 0),
-            "oneWeekPriceChange": float(m.get("oneWeekPriceChange", 0) or 0),
-        })
-    result.sort(key=lambda x: x["question"])
-    return result
+        results.sort(key=lambda x: x["threshold"])
+        return results
+
+    except Exception as e:
+        print(f"[polymarket] Error: {e}")
+        return []

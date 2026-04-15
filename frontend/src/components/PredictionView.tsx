@@ -1,0 +1,86 @@
+"use client";
+
+import type { PredictionData } from "@/lib/api";
+import BuySellPanel from "@/components/BuySellPanel";
+import PolymarketTable from "@/components/PolymarketTable";
+import TechnicalIndicators from "@/components/TechnicalIndicators";
+import HowItWorks from "@/components/HowItWorks";
+
+interface PredictionViewProps {
+  data: PredictionData;
+  loading: boolean;
+}
+
+export default function PredictionView({ data, loading }: PredictionViewProps) {
+  if (loading && !data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="w-8 h-8 border-2 border-tm-accent border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-sm text-tm-muted">Analyzing BTC...</p>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-4">
+      {/* Price header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-bold">
+              ${data.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span className={`text-sm font-medium ${data.change_24h >= 0 ? "text-tm-green" : "text-tm-red"}`}>
+              {data.change_24h >= 0 ? "+" : ""}{data.change_24h.toFixed(2)}%
+            </span>
+          </div>
+          <p className="text-xs text-tm-muted mt-0.5">Bitcoin (BTC/USD) &bull; Source: TrueMarkets</p>
+        </div>
+        <div className="text-right">
+          <span className={`text-xs font-bold px-2 py-1 rounded ${
+            data.recommended_side === "buy" ? "bg-tm-green/20 text-tm-green" : "bg-tm-red/20 text-tm-red"
+          }`}>
+            {data.recommended_side.toUpperCase()} &bull; {(data.confidence * 100).toFixed(0)}% confidence
+          </span>
+        </div>
+      </div>
+
+      {/* Buy / Sell Panel */}
+      <BuySellPanel
+        recommendedSide={data.recommended_side}
+        confidence={data.confidence}
+        buySignals={data.buy_signals}
+        sellSignals={data.sell_signals}
+        buyCount={data.buy_count}
+        sellCount={data.sell_count}
+        totalSignals={data.total_signals}
+        currentPrice={data.current_price}
+      />
+
+      {/* Grid: Polymarket table + Technical indicators */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-7">
+          <PolymarketTable
+            thresholds={data.polymarket_thresholds}
+            currentPrice={data.current_price}
+          />
+        </div>
+        <div className="lg:col-span-5">
+          <TechnicalIndicators
+            indicators={data.technical_indicators}
+            orderFlow={data.order_flow}
+            fearGreed={data.fear_greed}
+          />
+        </div>
+      </div>
+
+      {/* How it works */}
+      <HowItWorks
+        weights={data.weights}
+        backtest={data.backtest_results}
+      />
+    </div>
+  );
+}

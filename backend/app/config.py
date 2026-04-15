@@ -5,14 +5,17 @@ load_dotenv()
 
 # ─── External APIs ────────────────────────────────────────
 FEAR_GREED_BASE = "https://api.alternative.me/fng"
-BLOCKCHAIN_INFO_BASE = "https://api.blockchain.info"
 POLYMARKET_GAMMA_BASE = "https://gamma-api.polymarket.com"
+BINANCE_BASE = "https://api.binance.com/api/v3"
+
+# ─── Polymarket ──────────────────────────────────────────
+POLYMARKET_APRIL_SLUG = "what-price-will-bitcoin-hit-in-april-2026"
 
 # ─── True Markets API ─────────────────────────────────────
 TRUEMARKETS_API_BASE = os.getenv("TRUEMARKETS_API_BASE", "https://api.truemarkets.co")
 TRUEMARKETS_KEY_FILE = os.getenv("TRUEMARKETS_KEY_FILE", "")
 
-# ─── Supported Coins ──────────────────────────────────────
+# ─── Supported Coins (kept for market page compatibility) ─
 SUPPORTED_COINS = {
     "bitcoin": {
         "symbol": "BTC",
@@ -52,8 +55,10 @@ SUPPORTED_COINS = {
 }
 
 # ─── Model Config ─────────────────────────────────────────
-MODEL_WEIGHTS_DIR = os.path.join(os.path.dirname(__file__), "..", "app", "models", "saved")
-SEQUENCE_LENGTH = 30  # Lookback window (30 periods)
+SAVED_DIR = os.path.join(os.path.dirname(__file__), "models", "saved")
+LIGHTGBM_MODEL_PATH = os.path.join(SAVED_DIR, "lightgbm_btc.pkl")
+SIGNAL_WEIGHTS_PATH = os.path.join(SAVED_DIR, "signal_weights.json")
+BACKTEST_RESULTS_PATH = os.path.join(SAVED_DIR, "backtest_results.json")
 
 # ─── Frontend ─────────────────────────────────────────────
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
