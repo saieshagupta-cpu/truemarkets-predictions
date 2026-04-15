@@ -54,10 +54,11 @@ export default function Home() {
     return () => clearInterval(i);
   }, [activeTab]);
 
-  // Fetch on tab switch
+  // Fetch on tab switch (always fetch fresh, even if we have stale data)
   useEffect(() => {
-    if (activeTab === "prediction" && !prediction && !predLoading) fetchPredictions();
-  }, [activeTab, prediction, predLoading, fetchPredictions]);
+    if (activeTab === "prediction" && !predLoading) fetchPredictions(!prediction);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // Auto-refresh predictions every 30s
   useEffect(() => {
