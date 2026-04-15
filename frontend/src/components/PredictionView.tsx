@@ -29,34 +29,24 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
-      {/* Top row: Price + Recommendation badge + Portfolio */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left: Price header */}
-        <div className="lg:col-span-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl font-bold">
-                  ${data.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span className={`text-sm font-medium ${data.change_24h >= 0 ? "text-tm-green" : "text-tm-red"}`}>
-                  {data.change_24h >= 0 ? "+" : ""}{data.change_24h.toFixed(2)}%
-                </span>
-              </div>
-              <p className="text-xs text-tm-muted mt-0.5">Bitcoin (BTC/USD) &bull; Source: TrueMarkets</p>
-            </div>
-            <span className={`text-xs font-bold px-2 py-1 rounded ${
-              data.recommended_side === "buy" ? "bg-tm-green/20 text-tm-green" : "bg-tm-red/20 text-tm-red"
-            }`}>
-              {data.recommended_side.toUpperCase()} &bull; {(data.confidence * 100).toFixed(0)}% confidence
+      {/* Price header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-bold">
+              ${data.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span className={`text-sm font-medium ${data.change_24h >= 0 ? "text-tm-green" : "text-tm-red"}`}>
+              {data.change_24h >= 0 ? "+" : ""}{data.change_24h.toFixed(2)}%
             </span>
           </div>
+          <p className="text-xs text-tm-muted mt-0.5">Bitcoin (BTC/USD) &bull; Source: TrueMarkets</p>
         </div>
-
-        {/* Right: Portfolio box */}
-        <div className="lg:col-span-4">
-          <PortfolioBox refreshKey={portfolioKey} />
-        </div>
+        <span className={`text-xs font-bold px-2 py-1 rounded ${
+          data.recommended_side === "buy" ? "bg-tm-green/20 text-tm-green" : "bg-tm-red/20 text-tm-red"
+        }`}>
+          {data.recommended_side.toUpperCase()} &bull; {(data.confidence * 100).toFixed(0)}% confidence
+        </span>
       </div>
 
       {/* Buy / Sell Panel (full width) */}
@@ -71,6 +61,9 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
         currentPrice={data.current_price}
         onOrderPlaced={() => setPortfolioKey((k) => k + 1)}
       />
+
+      {/* Portfolio + Recent Orders */}
+      <PortfolioBox refreshKey={portfolioKey} />
 
       {/* Grid: Polymarket table + Technical indicators */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
