@@ -14,15 +14,20 @@ _refresh_task = None
 
 
 async def _refresh_loop():
-    """Background: refresh BTC price + clear caches every 30 seconds."""
+    """Background: refresh BTC price + clear caches every 30 seconds.
+    Does NOT overwrite TM push data if it's fresh (< 180s old)."""
     while True:
         try:
-            price_data = await fetch_current_price("BTC")
-            if price_data and price_data.get("price", 0) > 0:
-                _tm_data["price"] = price_data["price"]
-                _tm_data["updated"] = time.time()
-                _cache.clear()
-                _chart_cache.clear()
+            # Only update price from cache if TM push data is stale
+            tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
+            if tm_age > 180:  # TM push is stale, use cache
+                price_data = await fetch_current_price("BTC")
+                if price_data and price_data.get("price", 0) > 0:
+                    _tm_data["price"] = price_data["price"]
+                    _tm_data["updated"] = time.time()
+            # Always clear endpoint caches so they re-fetch
+            _cache.clear()
+            _chart_cache.clear()
         except Exception:
             pass
         await asyncio.sleep(30)
