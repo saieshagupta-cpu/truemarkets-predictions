@@ -77,18 +77,18 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
         onOrderPlaced={() => setPortfolioKey((k) => k + 1)}
       />
 
-      {/* Portfolio + Recent Orders */}
-      <PortfolioBox refreshKey={portfolioKey} />
+      {/* Polymarket (full width, moved up) */}
+      <PolymarketTable
+        thresholds={data.polymarket_thresholds}
+        currentPrice={data.current_price}
+      />
 
-      {/* Grid: Polymarket table + Technical indicators */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <div className="lg:col-span-7">
-          <PolymarketTable
-            thresholds={data.polymarket_thresholds}
-            currentPrice={data.current_price}
-          />
+      {/* Grid: Portfolio + Technical indicators (same width, stacked right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="space-y-4">
+          <PortfolioBox refreshKey={portfolioKey} />
         </div>
-        <div className="lg:col-span-5">
+        <div className="space-y-4">
           <TechnicalIndicators
             indicators={data.technical_indicators}
             orderFlow={data.order_flow}
