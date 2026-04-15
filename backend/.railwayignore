@@ -1,0 +1,8 @@
+app/data/cache/onchain/*.csv
+app/data/cache/onchain/onchain_merged.csv
+charts/
+backtest_results/
+train/
+*.pptx
+*.docx
+*.js

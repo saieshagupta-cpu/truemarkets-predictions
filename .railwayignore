@@ -1,0 +1,8 @@
+frontend/
+charts/
+backtest_results/
+*.pptx
+*.docx
+*.js
+__pycache__/
+*.pyc
