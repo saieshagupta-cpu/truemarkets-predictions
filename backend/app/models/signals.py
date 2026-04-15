@@ -88,22 +88,23 @@ def compute_order_flow_signal(flow: dict) -> dict:
     Signal 2: Binance BTCUSDT order flow.
     Based on buy/sell volume ratio + order book imbalance.
     """
-    signal_val = flow.get("signal", 0)
     buy_ratio = flow.get("buy_sell_ratio", 0.5)
     imbalance = flow.get("imbalance", 0)
     pressure = flow.get("pressure", "neutral")
 
-    if signal_val > 0.03:
+    # Direction matches the pressure label (based on buy/sell ratio)
+    if pressure in ("buy", "strong_buy"):
         direction = "bullish"
-        reason = f"Order flow: buyers dominate ({buy_ratio*100:.0f}% buy volume), book imbalance {imbalance:+.2f}"
-    elif signal_val < -0.03:
+        reason = f"Order flow: buyers lead ({buy_ratio*100:.0f}% buy volume), book imbalance {imbalance:+.2f}"
+    elif pressure in ("sell", "strong_sell"):
         direction = "bearish"
-        reason = f"Order flow: sellers dominate ({(1-buy_ratio)*100:.0f}% sell volume), book imbalance {imbalance:+.2f}"
+        reason = f"Order flow: sellers lead ({(1-buy_ratio)*100:.0f}% sell volume), book imbalance {imbalance:+.2f}"
     else:
         direction = "neutral"
         reason = f"Order flow: balanced ({buy_ratio*100:.0f}% buy / {(1-buy_ratio)*100:.0f}% sell)"
 
-    strength = 0.5 + signal_val * 0.5  # map -1/+1 to 0/1
+    # Strength from buy ratio directly
+    strength = buy_ratio  # 0.5 = neutral, >0.5 = bullish, <0.5 = bearish
 
     return _signal("Order Flow", direction, strength, reason,
                    WEIGHTS.get("order_flow", 0.15),
