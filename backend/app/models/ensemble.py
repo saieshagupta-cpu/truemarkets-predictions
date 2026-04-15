@@ -118,9 +118,9 @@ def compute_signals(
 
     # ── 1. GRU (primary model — 56.9% OOS) ───────────────
     gru_prob = _predict_gru(prices)
-    gru_dir = "up" if gru_prob > 0.5 else "down"
+    gru_dir = "bullish" if gru_prob > 0.52 else "bearish" if gru_prob < 0.48 else "neutral"
     gru_pct = int(max(gru_prob, 1 - gru_prob) * 100)
-    gru_reason = f"GRU model ({gru_pct}% {gru_dir}) — 30-day pattern analysis"
+    gru_reason = f"GRU model: {gru_pct}% {gru_dir} — 30-day pattern analysis"
     signals.append(Signal("GRU", gru_prob, gru_reason, 0.45))
 
     # ── 2. XGBoost (regime model — 54.6% OOS) ────────────
@@ -142,13 +142,15 @@ def compute_signals(
     xgb_model = DirectionXGBoostPredictor()
     xgb_prob = xgb_model.predict_direction(xgb_features)
 
-    xgb_reasons = []
-    if rsi_val < 30: xgb_reasons.append(f"RSI oversold ({rsi_val:.0f})")
-    elif rsi_val > 70: xgb_reasons.append(f"RSI overbought ({rsi_val:.0f})")
-    if macd_hist > 0: xgb_reasons.append(f"MACD bullish")
-    elif macd_hist < 0: xgb_reasons.append(f"MACD bearish")
+    xgb_details = []
+    if rsi_val < 30: xgb_details.append(f"RSI oversold ({rsi_val:.0f})")
+    elif rsi_val > 70: xgb_details.append(f"RSI overbought ({rsi_val:.0f})")
+    else: xgb_details.append(f"RSI {rsi_val:.0f}")
+    if macd_hist > 0: xgb_details.append("MACD bullish")
+    elif macd_hist < 0: xgb_details.append("MACD bearish")
     xgb_dir = "bullish" if xgb_prob > 0.52 else "bearish" if xgb_prob < 0.48 else "neutral"
-    xgb_reason = f"Regime model ({xgb_dir}): " + (", ".join(xgb_reasons) if xgb_reasons else f"RSI {rsi_val:.0f}")
+    xgb_pct = int(max(xgb_prob, 1 - xgb_prob) * 100)
+    xgb_reason = f"Regime model: {xgb_pct}% {xgb_dir} ({', '.join(xgb_details)})"
     signals.append(Signal("XGBoost", xgb_prob, xgb_reason, 0.35))
 
     # ── 3. Sentiment (contrarian — 55.7% at extremes) ────
@@ -275,19 +277,33 @@ def recommend(signals: list[Signal]) -> dict:
         side = "hold"
         abstaining = True
 
-    # Build reasons — ALL weighted signals always appear (no silent neutral)
+    # Build reasons — place each signal on the correct side based on its own prediction
     buy_reasons, sell_reasons = [], []
     for s in signals:
-        if s.weight > 0 or s.prob_up > 0.52 or s.prob_up < 0.48:
-            # Every weighted signal picks a side; context signals only if clearly directional
-            if s.prob_up >= 0.50:
-                buy_reasons.append(s.reason)
-            else:
-                sell_reasons.append(s.reason)
+        # Determine this signal's actual direction from its reason text and probability
+        is_bullish = s.prob_up > 0.50
+        is_bearish = s.prob_up < 0.50
+        is_neutral = s.prob_up == 0.50
+
+        # Skip context-only signals (weight=0) unless they have a clear direction
+        if s.weight == 0 and abs(s.prob_up - 0.5) < 0.03:
+            continue
+
+        if is_neutral:
+            # Truly neutral — don't place on either side
+            continue
+        elif is_bullish:
+            buy_reasons.append(s.reason)
+        else:
+            sell_reasons.append(s.reason)
 
     if abstaining:
         abstain_msg = f"Models disagree (GRU: {'↑' if gru_up else '↓'}, XGB: {'↑' if xgb_up else '↓'}) — holding"
-        buy_reasons.insert(0, abstain_msg)
+        if not buy_reasons and not sell_reasons:
+            buy_reasons.append(abstain_msg)
+        else:
+            # Add to the smaller side
+            (sell_reasons if len(buy_reasons) > len(sell_reasons) else buy_reasons).insert(0, abstain_msg)
 
     return {
         "primary_side": side,
