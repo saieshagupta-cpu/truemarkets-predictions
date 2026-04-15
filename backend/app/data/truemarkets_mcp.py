@@ -247,6 +247,37 @@ async def fetch_detailed_btc_stats() -> dict:
         if p0 > 0:
             change_30d = ((price - p0) / p0) * 100
 
+    # 1y change — use 5Y or 3Y cache
+    change_1y = 0
+    try:
+        import os as _os
+        for fname in ["btc_5Y_1d.json", "btc_3Y_1d.json"]:
+            fpath = _os.path.join(CACHE_DIR, fname)
+            if _os.path.exists(fpath):
+                with open(fpath) as _f:
+                    hist = json.load(_f)
+                pts_hist = hist.get("results", [{}])[0].get("points", [])
+                if pts_hist and price > 0:
+                    # Find price ~365 days ago
+                    from datetime import datetime, timedelta, timezone
+                    now = datetime.now(timezone.utc)
+                    target = now - timedelta(days=365)
+                    best_pt = None
+                    best_diff = float("inf")
+                    for pt in pts_hist:
+                        pt_time = datetime.fromisoformat(pt["t"].replace("Z", "+00:00"))
+                        diff = abs((pt_time - target).total_seconds())
+                        if diff < best_diff:
+                            best_diff = diff
+                            best_pt = pt
+                    if best_pt and best_diff < 7 * 86400:  # within 7 days
+                        p_1y = float(best_pt["price"])
+                        if p_1y > 0:
+                            change_1y = ((price - p_1y) / p_1y) * 100
+                break
+    except Exception:
+        pass
+
     btc_supply = 19_850_000
     return {
         "price": price,
@@ -263,7 +294,7 @@ async def fetch_detailed_btc_stats() -> dict:
         "total_supply": 0,
         "price_change_7d": round(change_7d, 2),
         "price_change_30d": round(change_30d, 2),
-        "price_change_1y": 0,
+        "price_change_1y": round(change_1y, 2),
     }
 
 

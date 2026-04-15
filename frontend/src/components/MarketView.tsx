@@ -60,12 +60,24 @@ export default function MarketView() {
         if (chartRes.status === "fulfilled" && chartRes.value.prices) setChart(chartRes.value.prices);
         if (mispRes.status === "fulfilled" && mispRes.value.indicators) {
           const m = mispRes.value;
+          // Use TM MCP sentiment from market-stats (same source as prediction page)
+          const tmSentiment = statsRes.status === "fulfilled" ? statsRes.value.tm_sentiment : null;
           setEnhanced({
-            fear_greed: m.indicators.fear_greed,
-            fear_greed_class: m.indicators.fear_greed_classification || m.sentiment_signal.fear_greed,
-            sentiment: m.sentiment_signal.overall_signal,
+            fear_greed: m.indicators.fear_greed ?? m.indicators.rsi,
+            fear_greed_class: m.indicators.fear_greed_classification || m.sentiment_signal?.fear_greed || "Neutral",
+            sentiment: tmSentiment ? (tmSentiment.charAt(0).toUpperCase() + tmSentiment.slice(1)) : (m.sentiment_signal?.overall_signal || "Neutral"),
             order_flow_pressure: m.order_flow?.pressure || "neutral",
-            recommendation: m.recommended_trade?.side || "hold",
+            recommendation: m.recommended_trade?.primary_side || m.recommended_trade?.side || "hold",
+          });
+        } else if (statsRes.status === "fulfilled" && statsRes.value.tm_sentiment) {
+          // Fallback: use market-stats TM sentiment even without mispricing data
+          const s = statsRes.value;
+          setEnhanced({
+            fear_greed: s.fear_greed?.current?.value || 50,
+            fear_greed_class: s.fear_greed?.current?.classification || "Neutral",
+            sentiment: s.tm_sentiment.charAt(0).toUpperCase() + s.tm_sentiment.slice(1),
+            order_flow_pressure: "neutral",
+            recommendation: "hold",
           });
         }
       } catch { /* */ }
