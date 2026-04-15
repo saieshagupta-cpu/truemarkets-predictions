@@ -5,7 +5,7 @@ Each signal returns a standardized dict with direction, strength, reason.
 Signals:
   1. Polymarket — prediction market probabilities
   2. Order Flow — Binance BTCUSDT buy/sell pressure
-  3. LightGBM  — 3-day direction model (35 features)
+  3. Our Model — 3-day direction model (35 features, gradient boosting)
   4. Technical  — RSI, MACD, Bollinger from TrueMarkets data
   5. Sentiment  — TrueMarkets MCP AI summary
   6. Fear & Greed — alternative.me index
@@ -117,19 +117,19 @@ def compute_order_flow_signal(flow: dict) -> dict:
 
 def compute_lightgbm_signal(prob_up: float, accuracy: float) -> dict:
     """
-    Signal 3: LightGBM 3-day direction model.
+    Signal 3: Our 3-day direction model.
     """
     if prob_up > 0.55:
         direction = "bullish"
-        reason = f"LightGBM: {prob_up*100:.0f}% probability BTC up in 3 days ({accuracy*100:.0f}% test accuracy)"
+        reason = f"Our model: {prob_up*100:.0f}% probability BTC up in 3 days"
     elif prob_up < 0.45:
         direction = "bearish"
-        reason = f"LightGBM: {(1-prob_up)*100:.0f}% probability BTC down in 3 days ({accuracy*100:.0f}% test accuracy)"
+        reason = f"Our model: {(1-prob_up)*100:.0f}% probability BTC down in 3 days"
     else:
         direction = "neutral"
-        reason = f"LightGBM: near 50/50 — no clear direction ({accuracy*100:.0f}% test accuracy)"
+        reason = f"Our model: near 50/50 — no clear direction"
 
-    return _signal("LightGBM", direction, prob_up, reason,
+    return _signal("Our Model", direction, prob_up, reason,
                    WEIGHTS.get("lightgbm", 0.20),
                    {"prob_up": prob_up, "model_accuracy": accuracy})
 

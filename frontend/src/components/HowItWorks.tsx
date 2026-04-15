@@ -27,8 +27,8 @@ export default function HowItWorks({ weights, backtest }: HowItWorksProps) {
               desc="Prediction market probabilities from Gamma API. 18 BTC price thresholds for April 2026." source="gamma-api.polymarket.com" />
             <SignalRow name="Order Flow" weight={weights.order_flow} color="text-tm-purple"
               desc="Real BTC buy/sell volume + order book depth from Binance BTCUSDT. 1000 recent trades + top 20 book levels." source="api.binance.com/api/v3" />
-            <SignalRow name="LightGBM Model" weight={weights.lightgbm} color="text-tm-green"
-              desc={`Gradient boosting with ${nFeatures} features. Predicts BTC direction over 3 days. ${accuracy}% test accuracy.`} source="CryptoCompare 5yr OHLCV" />
+            <SignalRow name="Our Model" weight={weights.lightgbm} color="text-tm-green"
+              desc={`Gradient boosting (XGBoost) with ${nFeatures} features. Predicts BTC direction over 3 days. ${accuracy}% test accuracy.`} source="CryptoCompare 5yr OHLCV" />
             <SignalRow name="Technical" weight={weights.technical} color="text-tm-yellow"
               desc="RSI (14), MACD (12,26,9), Bollinger Band position. Computed from TrueMarkets MCP price data." source="TrueMarkets MCP" />
             <SignalRow name="TM Sentiment" weight={weights.sentiment} color="text-tm-accent"
@@ -40,7 +40,7 @@ export default function HowItWorks({ weights, backtest }: HowItWorksProps) {
 
         {/* Model Details */}
         <div>
-          <p className="text-white font-semibold text-xs mb-1">LightGBM Model Details</p>
+          <p className="text-white font-semibold text-xs mb-1">Our Model Details</p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pl-1">
             <span>Test Accuracy:</span><span className="text-white font-medium">{accuracy}%</span>
             <span>Training Data:</span><span className="text-white">{trainPeriod}</span>
