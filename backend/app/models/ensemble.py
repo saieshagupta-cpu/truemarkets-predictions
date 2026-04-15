@@ -275,13 +275,15 @@ def recommend(signals: list[Signal]) -> dict:
         side = "hold"
         abstaining = True
 
-    # Build reasons
+    # Build reasons — ALL weighted signals always appear (no silent neutral)
     buy_reasons, sell_reasons = [], []
     for s in signals:
-        if s.prob_up > 0.52:
-            buy_reasons.append(s.reason)
-        elif s.prob_up < 0.48:
-            sell_reasons.append(s.reason)
+        if s.weight > 0 or s.prob_up > 0.52 or s.prob_up < 0.48:
+            # Every weighted signal picks a side; context signals only if clearly directional
+            if s.prob_up >= 0.50:
+                buy_reasons.append(s.reason)
+            else:
+                sell_reasons.append(s.reason)
 
     if abstaining:
         abstain_msg = f"Models disagree (GRU: {'↑' if gru_up else '↓'}, XGB: {'↑' if xgb_up else '↓'}) — holding"
@@ -298,12 +300,12 @@ def recommend(signals: list[Signal]) -> dict:
         "buy_case": {
             "side": "buy",
             "reasons": buy_reasons,
-            "vote_count": len([s for s in signals if s.prob_up > 0.52]),
+            "vote_count": len(buy_reasons),
         },
         "sell_case": {
             "side": "sell",
             "reasons": sell_reasons,
-            "vote_count": len([s for s in signals if s.prob_up < 0.48]),
+            "vote_count": len(sell_reasons),
         },
         "total_signals": len([s for s in signals if s.weight > 0]),
         "signal_details": [
