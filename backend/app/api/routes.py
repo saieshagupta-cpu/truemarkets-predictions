@@ -364,7 +364,7 @@ async def get_mispricing(coin: str = "bitcoin"):
         "change_24h_pct": pred.get("change_24h", 0), "change_24h_usd": 0,
         "confidence": pred["confidence"],
         "sentiment_signal": {
-            "overall_signal": "Bullish" if pred["weighted_strength"] > 0.55 else "Bearish" if pred["weighted_strength"] < 0.45 else "Neutral",
+            "overall_signal": _tm_data["sentiment"].capitalize() if _tm_data["sentiment"] and _tm_data["sentiment"] != "neutral" else ("Bullish" if pred["weighted_strength"] > 0.55 else "Bearish" if pred["weighted_strength"] < 0.45 else "Neutral"),
             "fear_greed": fg.get("current", {}).get("classification", "Neutral"),
             "fear_greed_value": fg.get("current", {}).get("value", 50),
             "sentiment_score": 0, "bullish_ratio": 0.5,
