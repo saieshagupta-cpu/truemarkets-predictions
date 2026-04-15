@@ -78,20 +78,19 @@ async def fetch_binance_order_flow() -> dict:
         total_depth = bid_depth + ask_depth
         imbalance = (bid_depth - ask_depth) / total_depth if total_depth > 0 else 0.0
 
-        # Combined signal: volume ratio (80%) + book imbalance (20%)
-        # Volume ratio is based on 1000+ trades — reliable
-        # Book imbalance is based on 20 levels — noisy, low weight
+        # Simple: buy vs sell ratio determines pressure
+        # buy > sell = buy, buy >> sell by 10%+ = strong_buy, vice versa
         vol_signal = (buy_sell_ratio - 0.5) * 2  # 0-1 → -1 to +1
         signal = vol_signal * 0.8 + imbalance * 0.2
         signal = max(-1.0, min(1.0, signal))
 
-        if signal > 0.25:
+        if buy_sell_ratio >= 0.60:       # buy >> sell by 10%+
             pressure = "strong_buy"
-        elif signal > 0.05:
+        elif buy_sell_ratio > 0.50:      # buy > sell
             pressure = "buy"
-        elif signal < -0.25:
+        elif buy_sell_ratio <= 0.40:     # sell >> buy by 10%+
             pressure = "strong_sell"
-        elif signal < -0.05:
+        elif buy_sell_ratio < 0.50:      # sell > buy
             pressure = "sell"
         else:
             pressure = "neutral"
