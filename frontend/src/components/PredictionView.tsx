@@ -42,11 +42,26 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
           </div>
           <p className="text-xs text-tm-muted mt-0.5">Bitcoin (BTC/USD) &bull; Source: TrueMarkets</p>
         </div>
-        <span className={`text-xs font-bold px-2 py-1 rounded ${
-          data.recommended_side === "buy" ? "bg-tm-green/20 text-tm-green" : "bg-tm-red/20 text-tm-red"
-        }`}>
-          {data.recommended_side.toUpperCase()} &bull; {(data.confidence * 100).toFixed(0)}% confidence
-        </span>
+        <div className="text-right">
+          <div className={`text-xs font-bold px-2.5 py-1 rounded inline-flex items-center gap-1.5 ${
+            data.sentiment_summary && data.sentiment_summary.toLowerCase().includes("bullish") ? "bg-tm-green/15 text-tm-green border border-tm-green/20" :
+            data.sentiment_summary && data.sentiment_summary.toLowerCase().includes("bearish") ? "bg-tm-red/15 text-tm-red border border-tm-red/20" :
+            "bg-tm-card text-tm-muted border border-tm-border"
+          }`}>
+            <span className="text-[9px] uppercase tracking-wider opacity-70">TM Sentiment</span>
+            <span>{
+              data.sentiment_summary
+                ? (data.sentiment_summary.toLowerCase().includes("bullish") ? "Bullish" :
+                   data.sentiment_summary.toLowerCase().includes("bearish") ? "Bearish" : "Neutral")
+                : "Neutral"
+            }</span>
+          </div>
+          {data.sentiment_summary && (
+            <p className="text-[9px] text-tm-muted mt-0.5 max-w-[200px] leading-tight truncate">
+              {data.sentiment_summary.slice(0, 80)}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Buy / Sell Panel (full width) */}
