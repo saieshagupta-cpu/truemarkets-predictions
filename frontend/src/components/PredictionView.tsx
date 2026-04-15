@@ -5,6 +5,7 @@ import type { PredictionData } from "@/lib/api";
 import BuySellPanel from "@/components/BuySellPanel";
 import PolymarketTable from "@/components/PolymarketTable";
 import TechnicalIndicators from "@/components/TechnicalIndicators";
+import OrderFlowPanel from "@/components/OrderFlowPanel";
 import PortfolioBox from "@/components/PortfolioBox";
 import HowItWorks from "@/components/HowItWorks";
 
@@ -64,7 +65,7 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
         </div>
       </div>
 
-      {/* Buy / Sell Panel (full width) */}
+      {/* Row 1: Buy / Sell */}
       <BuySellPanel
         recommendedSide={data.recommended_side}
         confidence={data.confidence}
@@ -77,23 +78,21 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
         onOrderPlaced={() => setPortfolioKey((k) => k + 1)}
       />
 
-      {/* Polymarket (full width, moved up) */}
-      <PolymarketTable
-        thresholds={data.polymarket_thresholds}
-        currentPrice={data.current_price}
-      />
-
-      {/* Grid: Portfolio + Technical indicators (same width, stacked right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="space-y-4">
-          <PortfolioBox refreshKey={portfolioKey} />
+      {/* Row 2: Polymarket (left) | Portfolio + Tech + Order Flow (right, stacked) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-7">
+          <PolymarketTable
+            thresholds={data.polymarket_thresholds}
+            currentPrice={data.current_price}
+          />
         </div>
-        <div className="space-y-4">
+        <div className="lg:col-span-5 space-y-4">
+          <PortfolioBox refreshKey={portfolioKey} />
           <TechnicalIndicators
             indicators={data.technical_indicators}
-            orderFlow={data.order_flow}
             fearGreed={data.fear_greed}
           />
+          <OrderFlowPanel orderFlow={data.order_flow} />
         </div>
       </div>
 
