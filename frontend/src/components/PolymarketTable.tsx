@@ -17,11 +17,22 @@ export default function PolymarketTable({ thresholds, currentPrice }: Polymarket
     );
   }
 
-  // Sort ALL thresholds highest to lowest
-  const sorted = [...thresholds].sort((a, b) => b.threshold - a.threshold);
+  // Split into above and below current price, take 5 closest each
+  const above = [...thresholds]
+    .filter(t => t.threshold > currentPrice)
+    .sort((a, b) => a.threshold - b.threshold)
+    .slice(0, 5)
+    .reverse(); // highest first
 
-  // Find where current price fits between thresholds
-  const priceInsertIdx = sorted.findIndex(t => t.threshold < currentPrice);
+  const below = [...thresholds]
+    .filter(t => t.threshold <= currentPrice)
+    .sort((a, b) => b.threshold - a.threshold)
+    .slice(0, 5); // highest first
+
+  const sorted = [...above, ...below];
+
+  // Current price goes between above and below
+  const priceInsertIdx = above.length;
 
   return (
     <div className="bg-tm-card border border-tm-border rounded-xl p-4">
