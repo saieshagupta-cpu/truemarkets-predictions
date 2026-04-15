@@ -1,30 +1,19 @@
 """
 Live on-chain data fetcher from BGeometrics API.
-Fetches latest values for CNN-LSTM model features.
+Fetches latest values + computes rate-of-change features for model input.
 Cached for 5 minutes (data is daily).
 """
 
+import os
 import time
+import json
+import numpy as np
+import pandas as pd
 import httpx
 
 BGEOMETRICS_TOKEN = "4KlmMZzF0B"
 BASE_URL = "https://api.bitcoin-data.com/v1"
-
-# Map feature names to BGeometrics endpoints
-FEATURE_ENDPOINTS = {
-    "exchange_netflow": "exchange-netflow-btc",
-    "nvt_ratio": "nvt-ratio",
-    "puell_multiple": "puell-multiple",
-    "realized_loss_usd": "realized-loss-usd",
-    "hodl_age_0d_1d": None,  # From hodl-waves-supply
-    "hodl_age_1d_1w": None,
-    "hodl_age_1w_1m": None,
-    "hodl_age_1m_3m": None,
-    "hodl_age_3m_6m": None,
-    "hodl_age_6m_1y": None,
-    "hodl_age_1y_2y": None,
-    "hodl_age_2y_3y": None,
-}
+CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache", "onchain")
 
 _cache: dict = {}
 _cache_ts: float = 0
@@ -32,69 +21,75 @@ CACHE_TTL = 300  # 5 minutes
 
 
 async def fetch_live_onchain() -> dict:
-    """Fetch latest on-chain values for CNN-LSTM model input."""
+    """Fetch latest on-chain values + rate-of-change features for model input."""
     global _cache, _cache_ts
 
     if time.time() - _cache_ts < CACHE_TTL and _cache:
         return _cache
 
-    result = {}
-    headers = {"Authorization": f"Bearer {BGEOMETRICS_TOKEN}"}
-
+    # Load the merged CSV and use the last 14 days for rate-of-change computation
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            # Fetch individual metrics
-            for feat, endpoint in FEATURE_ENDPOINTS.items():
-                if endpoint is None:
-                    continue
-                try:
-                    resp = await client.get(f"{BASE_URL}/{endpoint}/last", headers=headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        # Extract the value (second non-date field)
-                        for k, v in data.items():
-                            if k not in ("d", "unixTs"):
-                                result[feat] = float(v) if v is not None else 0.0
-                                break
-                except Exception:
-                    result[feat] = 0.0
+        merged_path = os.path.join(CACHE_DIR, "onchain_merged.csv")
+        if not os.path.exists(merged_path):
+            return {}
 
-            # Fetch HODL waves (one call, all age bands)
-            try:
-                resp = await client.get(f"{BASE_URL}/hodl-waves-supply/last", headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    hodl_map = {
-                        "age_0d_1d": "hodl_age_0d_1d",
-                        "age_1d_1w": "hodl_age_1d_1w",
-                        "age_1w_1m": "hodl_age_1w_1m",
-                        "age_1m_3m": "hodl_age_1m_3m",
-                        "age_3m_6m": "hodl_age_3m_6m",
-                        "age_6m_1y": "hodl_age_6m_1y",
-                        "age_1y_2y": "hodl_age_1y_2y",
-                        "age_2y_3y": "hodl_age_2y_3y",
-                    }
-                    for api_key, feat_name in hodl_map.items():
-                        if api_key in data:
-                            result[feat_name] = float(data[api_key])
-            except Exception:
-                pass
+        df = pd.read_csv(merged_path)
+        df["date"] = pd.to_datetime(df["date"])
 
-            # Fetch hash ribbons
-            try:
-                resp = await client.get(f"{BASE_URL}/hashribbons/last", headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    result["hash_ribbons"] = float(data.get("sma30", 0))
-                    result["hash_ribbons_1"] = float(data.get("sma60", 0))
-                    hr_val = data.get("hashribbons", "Up")
-                    result["hash_ribbons_2"] = 1.0 if hr_val == "Up" else 0.0
-            except Exception:
-                pass
+        # Fix dupes
+        cols = list(df.columns)
+        seen = {}
+        for i, c in enumerate(cols):
+            if c in seen: seen[c] += 1; cols[i] = f"{c}_{seen[c]}"
+            else: seen[c] = 0
+        df.columns = cols
+
+        # Convert strings
+        for col in df.columns:
+            if df[col].dtype == object and col != "date":
+                uniques = sorted(str(u) for u in df[col].unique())
+                df[col] = df[col].map({v: i for i, v in enumerate(uniques)}).fillna(0)
+
+        exclude = ["date", "price_open", "price_high", "price_low", "price_close", "price_volume"]
+        base_cols = [c for c in df.columns if c not in exclude]
+
+        # Get latest row as dict
+        latest = df.iloc[-1]
+        result = {}
+        for col in base_cols:
+            result[col] = float(latest[col]) if pd.notna(latest[col]) else 0.0
+
+        # Rate-of-change features from last 14 days
+        for col in base_cols:
+            vals = df[col].values.astype(float)
+            current = vals[-1]
+            for lag in [1, 3, 7, 14]:
+                if len(vals) > lag:
+                    prev = vals[-1 - lag]
+                    denom = prev if abs(prev) > 1e-10 else 1
+                    result[f"{col}_chg{lag}d"] = (current - prev) / denom
+                else:
+                    result[f"{col}_chg{lag}d"] = 0.0
+
+        # Price-derived features
+        prices = df["price_close"].values.astype(float)
+        log_ret = np.diff(np.log(np.maximum(prices[-21:], 1)))
+        result["log_return"] = float(log_ret[-1]) if len(log_ret) > 0 else 0.0
+        result["volatility_5d"] = float(np.std(log_ret[-5:])) if len(log_ret) >= 5 else 0.0
+        result["volatility_20d"] = float(np.std(log_ret)) if len(log_ret) >= 10 else 0.0
+        result["momentum_5d"] = float((prices[-1] - prices[-6]) / prices[-6]) if len(prices) > 6 else 0.0
+        result["momentum_20d"] = float((prices[-1] - prices[-21]) / prices[-21]) if len(prices) > 21 else 0.0
+
+        # RSI
+        deltas = np.diff(prices[-15:])
+        gains = np.mean([d for d in deltas if d > 0]) if any(d > 0 for d in deltas) else 0
+        losses = np.mean([-d for d in deltas if d < 0]) if any(d < 0 for d in deltas) else 0.001
+        result["rsi"] = 100 - (100 / (1 + gains / losses))
+
+        _cache = result
+        _cache_ts = time.time()
+        return result
 
     except Exception as e:
         print(f"[onchain_live] Error: {e}")
-
-    _cache = result
-    _cache_ts = time.time()
-    return result
+        return _cache if _cache else {}

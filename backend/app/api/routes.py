@@ -173,17 +173,11 @@ async def get_prediction():
                 bollinger_pos = (current_price - bb_lower) / bb_range if bb_range > 0 else 0.5
             bollinger_pos = max(0, min(1, bollinger_pos))
 
-        # ── CNN-LSTM prediction (on-chain data from BGeometrics) ──
+        # ── Model prediction (on-chain data from BGeometrics) ──
         try:
             onchain = await fetch_live_onchain()
             if onchain and _model.trained:
-                # Build feature dict with last WINDOW_SIZE values (we only have latest, repeat)
-                from app.models.cnn_lstm import WINDOW_SIZE
-                feat_dict = {}
-                for feat in (_model.selected_features or []):
-                    val = onchain.get(feat, 0.0)
-                    feat_dict[feat] = [val] * WINDOW_SIZE  # Repeat latest for window
-                model_prob = _model.predict(feat_dict)
+                model_prob = _model.predict(onchain)
         except Exception:
             model_prob = 0.5
 
