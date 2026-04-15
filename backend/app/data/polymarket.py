@@ -34,6 +34,10 @@ async def fetch_polymarket_thresholds() -> list[dict]:
 
         results = []
         for m in markets:
+            # Skip closed/resolved markets
+            if m.get("closed", False):
+                continue
+
             question = m.get("question", "")
             match = re.search(r'\$?([\d,]+)', question)
             if not match:
