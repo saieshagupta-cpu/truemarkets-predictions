@@ -75,8 +75,10 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
         confidence={data.confidence}
         buySignals={data.buy_signals}
         sellSignals={data.sell_signals}
+        neutralSignals={data.neutral_signals || []}
         buyCount={data.buy_count}
         sellCount={data.sell_count}
+        neutralCount={data.neutral_count || 0}
         totalSignals={data.total_signals}
         currentPrice={data.current_price}
         onOrderPlaced={() => setPortfolioKey((k) => k + 1)}

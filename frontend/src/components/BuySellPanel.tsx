@@ -9,37 +9,63 @@ interface BuySellPanelProps {
   confidence: number;
   buySignals: Signal[];
   sellSignals: Signal[];
+  neutralSignals: Signal[];
   buyCount: number;
   sellCount: number;
+  neutralCount: number;
   totalSignals: number;
   currentPrice: number;
   onOrderPlaced?: () => void;
 }
 
 export default function BuySellPanel({
-  recommendedSide, confidence, buySignals, sellSignals,
-  buyCount, sellCount, totalSignals, currentPrice, onOrderPlaced,
+  recommendedSide, confidence, buySignals, sellSignals, neutralSignals,
+  buyCount, sellCount, neutralCount, totalSignals, currentPrice, onOrderPlaced,
 }: BuySellPanelProps) {
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <SideCard
-        side="buy"
-        isRecommended={recommendedSide === "buy"}
-        signals={buySignals}
-        count={buyCount}
-        total={totalSignals}
-        price={currentPrice}
-        onOrderPlaced={onOrderPlaced}
-      />
-      <SideCard
-        side="sell"
-        isRecommended={recommendedSide === "sell"}
-        signals={sellSignals}
-        count={sellCount}
-        total={totalSignals}
-        price={currentPrice}
-        onOrderPlaced={onOrderPlaced}
-      />
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <SideCard
+          side="buy"
+          isRecommended={recommendedSide === "buy"}
+          signals={buySignals}
+          count={buyCount}
+          total={totalSignals}
+          price={currentPrice}
+          onOrderPlaced={onOrderPlaced}
+        />
+        <SideCard
+          side="sell"
+          isRecommended={recommendedSide === "sell"}
+          signals={sellSignals}
+          count={sellCount}
+          total={totalSignals}
+          price={currentPrice}
+          onOrderPlaced={onOrderPlaced}
+        />
+      </div>
+      {neutralSignals.length > 0 && (
+        <div className="bg-tm-card border border-tm-border rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-bold text-tm-muted">NEUTRAL</span>
+            <span className="text-xs text-tm-muted">{neutralCount}/{totalSignals}</span>
+          </div>
+          <div className="space-y-2">
+            {neutralSignals.map((s, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-tm-muted mt-0.5 text-xs">●</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-xs font-semibold text-tm-text">{s.name}</span>
+                    <span className="text-[9px] text-tm-muted">({Math.round(s.weight * 100)}%)</span>
+                  </div>
+                  <p className="text-[11px] text-tm-muted leading-snug">{s.reason}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

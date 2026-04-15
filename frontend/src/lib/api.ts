@@ -55,8 +55,10 @@ export interface PredictionData {
   sentiment_direction: string;
   buy_signals: Signal[];
   sell_signals: Signal[];
+  neutral_signals: Signal[];
   buy_count: number;
   sell_count: number;
+  neutral_count: number;
   total_signals: number;
   polymarket_thresholds: PolymarketThreshold[];
   order_flow: OrderFlowData;

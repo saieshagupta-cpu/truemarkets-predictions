@@ -92,18 +92,17 @@ def compute_order_flow_signal(flow: dict) -> dict:
     imbalance = flow.get("imbalance", 0)
     pressure = flow.get("pressure", "neutral")
 
-    # Direction matches the pressure label (based on buy/sell ratio)
-    if pressure in ("buy", "strong_buy"):
+    # ±5% neutral zone: 45-55% buy = neutral
+    if buy_ratio >= 0.55:
         direction = "bullish"
         reason = f"Order flow: buyers lead ({buy_ratio*100:.0f}% buy volume), book imbalance {imbalance:+.2f}"
-    elif pressure in ("sell", "strong_sell"):
+    elif buy_ratio <= 0.45:
         direction = "bearish"
         reason = f"Order flow: sellers lead ({(1-buy_ratio)*100:.0f}% sell volume), book imbalance {imbalance:+.2f}"
     else:
         direction = "neutral"
         reason = f"Order flow: balanced ({buy_ratio*100:.0f}% buy / {(1-buy_ratio)*100:.0f}% sell)"
 
-    # Strength from buy ratio directly
     strength = buy_ratio  # 0.5 = neutral, >0.5 = bullish, <0.5 = bearish
 
     return _signal("Order Flow", direction, strength, reason,
@@ -266,8 +265,9 @@ def aggregate_signals(signals: list[dict]) -> dict:
 
     weighted_strength = sum(s["strength"] * s["weight"] for s in signals) / total_weight
 
-    buy_signals = [s for s in signals if s["strength"] >= 0.50]
-    sell_signals = [s for s in signals if s["strength"] < 0.50]
+    buy_signals = [s for s in signals if s["direction"] == "bullish"]
+    sell_signals = [s for s in signals if s["direction"] == "bearish"]
+    neutral_signals = [s for s in signals if s["direction"] == "neutral"]
 
     if weighted_strength > 0.52:
         recommended = "buy"
@@ -284,8 +284,10 @@ def aggregate_signals(signals: list[dict]) -> dict:
         "confidence": round(confidence, 4),
         "buy_signals": sorted(buy_signals, key=lambda s: -s["weight"]),
         "sell_signals": sorted(sell_signals, key=lambda s: -s["weight"]),
+        "neutral_signals": sorted(neutral_signals, key=lambda s: -s["weight"]),
         "buy_count": len(buy_signals),
         "sell_count": len(sell_signals),
+        "neutral_count": len(neutral_signals),
         "total_signals": len(signals),
         "weights": {s["name"]: s["weight"] for s in signals},
     }
