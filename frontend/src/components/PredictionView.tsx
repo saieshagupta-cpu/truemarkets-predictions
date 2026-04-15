@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import type { PredictionData } from "@/lib/api";
 import BuySellPanel from "@/components/BuySellPanel";
 import PolymarketTable from "@/components/PolymarketTable";
 import TechnicalIndicators from "@/components/TechnicalIndicators";
+import PortfolioBox from "@/components/PortfolioBox";
 import HowItWorks from "@/components/HowItWorks";
 
 interface PredictionViewProps {
@@ -12,6 +14,8 @@ interface PredictionViewProps {
 }
 
 export default function PredictionView({ data, loading }: PredictionViewProps) {
+  const [portfolioKey, setPortfolioKey] = useState(0);
+
   if (loading && !data) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -24,30 +28,38 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
   if (!data) return null;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
-      {/* Price header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold">
-              ${data.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <span className={`text-sm font-medium ${data.change_24h >= 0 ? "text-tm-green" : "text-tm-red"}`}>
-              {data.change_24h >= 0 ? "+" : ""}{data.change_24h.toFixed(2)}%
+    <div className="max-w-5xl mx-auto space-y-4">
+      {/* Top row: Price + Recommendation badge + Portfolio */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Left: Price header */}
+        <div className="lg:col-span-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl font-bold">
+                  ${data.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className={`text-sm font-medium ${data.change_24h >= 0 ? "text-tm-green" : "text-tm-red"}`}>
+                  {data.change_24h >= 0 ? "+" : ""}{data.change_24h.toFixed(2)}%
+                </span>
+              </div>
+              <p className="text-xs text-tm-muted mt-0.5">Bitcoin (BTC/USD) &bull; Source: TrueMarkets</p>
+            </div>
+            <span className={`text-xs font-bold px-2 py-1 rounded ${
+              data.recommended_side === "buy" ? "bg-tm-green/20 text-tm-green" : "bg-tm-red/20 text-tm-red"
+            }`}>
+              {data.recommended_side.toUpperCase()} &bull; {(data.confidence * 100).toFixed(0)}% confidence
             </span>
           </div>
-          <p className="text-xs text-tm-muted mt-0.5">Bitcoin (BTC/USD) &bull; Source: TrueMarkets</p>
         </div>
-        <div className="text-right">
-          <span className={`text-xs font-bold px-2 py-1 rounded ${
-            data.recommended_side === "buy" ? "bg-tm-green/20 text-tm-green" : "bg-tm-red/20 text-tm-red"
-          }`}>
-            {data.recommended_side.toUpperCase()} &bull; {(data.confidence * 100).toFixed(0)}% confidence
-          </span>
+
+        {/* Right: Portfolio box */}
+        <div className="lg:col-span-4">
+          <PortfolioBox refreshKey={portfolioKey} />
         </div>
       </div>
 
-      {/* Buy / Sell Panel */}
+      {/* Buy / Sell Panel (full width) */}
       <BuySellPanel
         recommendedSide={data.recommended_side}
         confidence={data.confidence}
@@ -57,6 +69,7 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
         sellCount={data.sell_count}
         totalSignals={data.total_signals}
         currentPrice={data.current_price}
+        onOrderPlaced={() => setPortfolioKey((k) => k + 1)}
       />
 
       {/* Grid: Polymarket table + Technical indicators */}
