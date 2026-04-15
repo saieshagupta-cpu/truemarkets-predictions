@@ -49,7 +49,6 @@ export default function HowItWorks({ weights }: HowItWorksProps) {
 
         <p className="text-[10px]">
           All data refreshes every <span className="text-white">30 seconds</span>.
-          Price is from the <span className="text-white">same source</span> on both pages.
         </p>
       </div>
     </details>
