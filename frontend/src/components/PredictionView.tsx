@@ -45,7 +45,7 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
         </div>
         <div className="text-right">
           {(() => {
-            const dir = ((data as Record<string, unknown>).sentiment_direction as string || "neutral").toLowerCase();
+            const dir = (data.sentiment_direction || "neutral").toLowerCase();
             const isBullish = dir === "bullish";
             const isBearish = dir === "bearish";
             return (

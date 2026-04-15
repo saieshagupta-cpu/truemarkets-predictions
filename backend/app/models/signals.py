@@ -115,19 +115,20 @@ def compute_order_flow_signal(flow: dict) -> dict:
                     "source": "Binance BTCUSDT"})
 
 
-def compute_lightgbm_signal(prob_up: float, accuracy: float) -> dict:
+def compute_model_signal(prob_up: float, accuracy: float) -> dict:
     """
-    Signal 3: Our 3-day direction model.
+    Signal 3: CNN-LSTM direction model (Omole & Enke 2024 architecture).
+    Uses on-chain data from BGeometrics.
     """
     if prob_up > 0.55:
         direction = "bullish"
-        reason = f"Our model: {prob_up*100:.0f}% probability BTC up in 3 days"
+        reason = f"Our model: {prob_up*100:.0f}% probability BTC up tomorrow (on-chain signals bullish)"
     elif prob_up < 0.45:
         direction = "bearish"
-        reason = f"Our model: {(1-prob_up)*100:.0f}% probability BTC down in 3 days"
+        reason = f"Our model: {(1-prob_up)*100:.0f}% probability BTC down tomorrow (on-chain signals bearish)"
     else:
         direction = "neutral"
-        reason = f"Our model: near 50/50 — no clear direction"
+        reason = f"Our model: near 50/50 — on-chain signals mixed"
 
     return _signal("Our Model", direction, prob_up, reason,
                    WEIGHTS.get("lightgbm", 0.20),

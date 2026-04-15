@@ -20,14 +20,14 @@ from app.data.fear_greed import fetch_fear_greed
 from app.data.polymarket import fetch_polymarket_thresholds
 from app.data.order_flow import fetch_binance_order_flow
 from app.data import truemarkets
-from app.models.lightgbm_model import LightGBMPredictor
+from app.models.cnn_lstm import CNNLSTMPredictor
 from app.models.signals import (
     compute_polymarket_signal, compute_order_flow_signal,
-    compute_lightgbm_signal, compute_technical_signal,
+    compute_model_signal, compute_technical_signal,
     compute_sentiment_signal, compute_fear_greed_signal,
     aggregate_signals,
 )
-from app.models.feature_engineering import build_features, FEATURE_NAMES
+from app.data.onchain_live import fetch_live_onchain
 from app.config import SUPPORTED_COINS, BACKTEST_RESULTS_PATH, SIGNAL_WEIGHTS_PATH
 
 router = APIRouter()
@@ -58,9 +58,9 @@ def _set_cached(key: str, data):
     _cache[key] = (data, time.time())
 
 
-# ─── LightGBM Model (loaded once) ──────────────────────
+# ─── CNN-LSTM Model (loaded once) ───────────────────────
 
-_lgbm = LightGBMPredictor()
+_model = CNNLSTMPredictor()
 
 
 # ─── Coins ──────────────────────────────────────────────
@@ -155,7 +155,7 @@ async def get_prediction():
 
         # ── Compute technical indicators from historical data ──
         rsi, macd_hist, bollinger_pos = 50.0, 0.0, 0.5
-        lgbm_prob = 0.5
+        model_prob = 0.5
 
         if not isinstance(historical, Exception) and len(historical) > 20:
             rsi = float(historical["rsi"].iloc[-1]) if "rsi" in historical.columns else 50
@@ -173,13 +173,19 @@ async def get_prediction():
                 bollinger_pos = (current_price - bb_lower) / bb_range if bb_range > 0 else 0.5
             bollinger_pos = max(0, min(1, bollinger_pos))
 
-            # ── LightGBM prediction ──
-            try:
-                feats = build_features(historical)
-                last_features = {f: float(feats[f].iloc[-1]) if f in feats.columns else 0.0 for f in FEATURE_NAMES}
-                lgbm_prob = _lgbm.predict(last_features)
-            except Exception:
-                lgbm_prob = 0.5
+        # ── CNN-LSTM prediction (on-chain data from BGeometrics) ──
+        try:
+            onchain = await fetch_live_onchain()
+            if onchain and _model.trained:
+                # Build feature dict with last WINDOW_SIZE values (we only have latest, repeat)
+                from app.models.cnn_lstm import WINDOW_SIZE
+                feat_dict = {}
+                for feat in (_model.selected_features or []):
+                    val = onchain.get(feat, 0.0)
+                    feat_dict[feat] = [val] * WINDOW_SIZE  # Repeat latest for window
+                model_prob = _model.predict(feat_dict)
+        except Exception:
+            model_prob = 0.5
 
         # ── TrueMarkets sentiment ──
         tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
@@ -191,7 +197,7 @@ async def get_prediction():
         signals = [
             compute_polymarket_signal(poly_thresholds, current_price),
             compute_order_flow_signal(order_flow),
-            compute_lightgbm_signal(lgbm_prob, _lgbm.get_accuracy()),
+            compute_model_signal(model_prob, _model.get_accuracy()),
             compute_technical_signal(rsi, macd_hist, bollinger_pos),
             compute_sentiment_signal(sentiment_data),
             compute_fear_greed_signal(fear_greed),

@@ -28,7 +28,7 @@ export default function HowItWorks({ weights, backtest }: HowItWorksProps) {
             <SignalRow name="Order Flow" weight={weights.order_flow} color="text-tm-purple"
               desc="Real BTC buy/sell volume + order book depth from Binance BTCUSDT. 1000 recent trades + top 20 book levels." source="api.binance.com/api/v3" />
             <SignalRow name="Our Model" weight={weights.lightgbm} color="text-tm-green"
-              desc={`Gradient boosting (XGBoost) with ${nFeatures} features. Predicts BTC direction over 3 days. ${accuracy}% test accuracy.`} source="CryptoCompare 5yr OHLCV" />
+              desc={`CNN-LSTM (Omole & Enke 2024) with ${nFeatures} on-chain features + Boruta selection. Next-day direction. ${accuracy}% test accuracy.`} source="BGeometrics on-chain API" />
             <SignalRow name="Technical" weight={weights.technical} color="text-tm-yellow"
               desc="RSI (14), MACD (12,26,9), Bollinger Band position. Computed from TrueMarkets MCP price data." source="TrueMarkets MCP" />
             <SignalRow name="TM Sentiment" weight={weights.sentiment} color="text-tm-accent"
@@ -45,9 +45,11 @@ export default function HowItWorks({ weights, backtest }: HowItWorksProps) {
             <span>Test Accuracy:</span><span className="text-white font-medium">{accuracy}%</span>
             <span>Training Data:</span><span className="text-white">{trainPeriod}</span>
             <span>Test Period:</span><span className="text-white">{testPeriod}</span>
-            <span>Features:</span><span className="text-white">{nFeatures}</span>
-            <span>Horizon:</span><span className="text-white">3 days</span>
-            <span>Algorithm:</span><span className="text-white">GradientBoosting (sklearn)</span>
+            <span>Features:</span><span className="text-white">{nFeatures} (Boruta-selected from 42)</span>
+            <span>Horizon:</span><span className="text-white">Next-day direction</span>
+            <span>Architecture:</span><span className="text-white">CNN-LSTM (Omole & Enke 2024)</span>
+            <span>Data Source:</span><span className="text-white">BGeometrics on-chain API</span>
+            <span>Window:</span><span className="text-white">5 days</span>
           </div>
           {topFeatures.length > 0 && (
             <div className="mt-1 pl-1">
@@ -65,7 +67,7 @@ export default function HowItWorks({ weights, backtest }: HowItWorksProps) {
               <tr><td className="pr-2 py-0.5">BTC Price</td><td className="text-white">TrueMarkets MCP (same as market page)</td></tr>
               <tr><td className="pr-2 py-0.5">Polymarket</td><td className="text-white">Gamma API (public, no auth)</td></tr>
               <tr><td className="pr-2 py-0.5">Order Flow</td><td className="text-white">Binance BTCUSDT (public, no auth)</td></tr>
-              <tr><td className="pr-2 py-0.5">Model Training</td><td className="text-white">CryptoCompare 5yr daily OHLCV</td></tr>
+              <tr><td className="pr-2 py-0.5">Model Training</td><td className="text-white">BGeometrics 5yr on-chain (HODL waves, MVRV, SOPR, etc.)</td></tr>
               <tr><td className="pr-2 py-0.5">Fear & Greed</td><td className="text-white">alternative.me/fng (daily)</td></tr>
               <tr><td className="pr-2 py-0.5">Sentiment</td><td className="text-white">TrueMarkets MCP AI summary</td></tr>
             </tbody>

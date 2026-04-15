@@ -52,6 +52,7 @@ export interface PredictionData {
   recommended_side: "buy" | "sell";
   confidence: number;
   weighted_strength: number;
+  sentiment_direction: string;
   buy_signals: Signal[];
   sell_signals: Signal[];
   buy_count: number;
