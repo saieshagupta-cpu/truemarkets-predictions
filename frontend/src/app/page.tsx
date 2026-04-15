@@ -8,6 +8,7 @@ import type { PredictionData } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 const PREDICTION_INTERVAL = 30 * 1000;
+const PRICE_POLL_INTERVAL = 15 * 1000;
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"market" | "prediction">("market");
@@ -15,6 +16,7 @@ export default function Home() {
   const [predLoading, setPredLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [nextRefresh, setNextRefresh] = useState(PREDICTION_INTERVAL / 1000);
+  const [livePrice, setLivePrice] = useState<number>(0);
 
   const fetchPredictions = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setPredLoading(true);
@@ -23,6 +25,7 @@ export default function Home() {
       if (res.ok) {
         const data = await res.json();
         setPrediction(data);
+        setLivePrice(data.current_price);
         setLastUpdated(new Date());
       }
     } catch {
@@ -33,12 +36,30 @@ export default function Home() {
     }
   }, []);
 
+  // Poll /price/bitcoin every 15s — SAME endpoint as MarketView
+  // This ensures both pages always show the same price
+  useEffect(() => {
+    if (activeTab !== "prediction") return;
+    const pollPrice = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/price/bitcoin?_t=${Date.now()}`, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.price > 0) setLivePrice(data.price);
+        }
+      } catch { /* keep last price */ }
+    };
+    pollPrice();
+    const i = setInterval(pollPrice, PRICE_POLL_INTERVAL);
+    return () => clearInterval(i);
+  }, [activeTab]);
+
   // Fetch on tab switch
   useEffect(() => {
     if (activeTab === "prediction" && !prediction && !predLoading) fetchPredictions();
   }, [activeTab, prediction, predLoading, fetchPredictions]);
 
-  // Auto-refresh every 30s
+  // Auto-refresh predictions every 30s
   useEffect(() => {
     if (activeTab !== "prediction") return;
     const i = setInterval(() => fetchPredictions(true), PREDICTION_INTERVAL);
@@ -50,6 +71,11 @@ export default function Home() {
     const t = setInterval(() => setNextRefresh((p) => Math.max(0, p - 1)), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // Override prediction price with live-polled price (same source as market page)
+  const predictionWithLivePrice = prediction && livePrice > 0
+    ? { ...prediction, current_price: livePrice }
+    : prediction;
 
   return (
     <div className="min-h-screen bg-tm-bg">
@@ -66,7 +92,7 @@ export default function Home() {
           <MarketView />
         ) : (
           <PredictionView
-            data={prediction!}
+            data={predictionWithLivePrice!}
             loading={predLoading}
           />
         )}
