@@ -159,31 +159,7 @@ async def fetch_current_price(symbol: str = "BTC") -> dict:
         except Exception:
             pass  # Fall through to cache
 
-    # Priority 2: BGeometrics live OHLC (reliable, no Cloudflare)
-    if symbol == "BTC":
-        try:
-            import httpx
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(
-                    "https://api.bitcoin-data.com/v1/btc-ohlc/last",
-                    headers={"Authorization": "Bearer 4KlmMZzF0B"},
-                )
-                if resp.status_code == 200:
-                    ohlc = resp.json()
-                    price = float(ohlc.get("close", 0))
-                    if price > 0:
-                        # Get 24h change from cache
-                        data = await _fetch_price_data(symbol, "1d", "1h")
-                        points = _points_from_cache_or_api(data)
-                        first_price = float(points[0]["price"]) if points else price
-                        change = ((price - first_price) / first_price * 100) if first_price > 0 else 0
-                        return {"price": round(price, 2), "change_24h": round(change, 2),
-                                "market_cap": round(price * 19_850_000), "volume_24h": 0,
-                                "source": "bgeometrics_live"}
-        except Exception:
-            pass
-
-    # Priority 3: Cache
+    # Priority 2: Cache (TrueMarkets MCP data from last push)
     data = await _fetch_price_data(symbol, "1d", "1h")
     points = _points_from_cache_or_api(data)
     if points:
