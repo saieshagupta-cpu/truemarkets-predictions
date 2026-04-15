@@ -240,6 +240,7 @@ async def get_prediction():
                 "bollinger_position": round(bollinger_pos, 3),
                 "bollinger_label": "Lower band" if bollinger_pos < 0.2 else "Upper band" if bollinger_pos > 0.8 else "Mid-range",
             },
+            "sentiment_direction": _tm_data["sentiment"] if _tm_data["sentiment"] else "neutral",
             "sentiment_summary": sentiment_data.get("summary", ""),
             "fear_greed": fear_greed,
             "backtest_results": backtest,

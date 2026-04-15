@@ -44,24 +44,28 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
           <p className="text-xs text-tm-muted mt-0.5">Bitcoin (BTC/USD) &bull; Source: TrueMarkets</p>
         </div>
         <div className="text-right">
-          <div className={`text-xs font-bold px-2.5 py-1 rounded inline-flex items-center gap-1.5 ${
-            data.sentiment_summary && data.sentiment_summary.toLowerCase().includes("bullish") ? "bg-tm-green/15 text-tm-green border border-tm-green/20" :
-            data.sentiment_summary && data.sentiment_summary.toLowerCase().includes("bearish") ? "bg-tm-red/15 text-tm-red border border-tm-red/20" :
-            "bg-tm-card text-tm-muted border border-tm-border"
-          }`}>
-            <span className="text-[9px] uppercase tracking-wider opacity-70">TM Sentiment</span>
-            <span>{
-              data.sentiment_summary
-                ? (data.sentiment_summary.toLowerCase().includes("bullish") ? "Bullish" :
-                   data.sentiment_summary.toLowerCase().includes("bearish") ? "Bearish" : "Neutral")
-                : "Neutral"
-            }</span>
-          </div>
-          {data.sentiment_summary && (
-            <p className="text-[9px] text-tm-muted mt-0.5 max-w-[200px] leading-tight truncate">
-              {data.sentiment_summary.slice(0, 80)}
-            </p>
-          )}
+          {(() => {
+            const dir = ((data as Record<string, unknown>).sentiment_direction as string || "neutral").toLowerCase();
+            const isBullish = dir === "bullish";
+            const isBearish = dir === "bearish";
+            return (
+              <>
+                <div className={`text-xs font-bold px-2.5 py-1 rounded inline-flex items-center gap-1.5 ${
+                  isBullish ? "bg-tm-green/15 text-tm-green border border-tm-green/20" :
+                  isBearish ? "bg-tm-red/15 text-tm-red border border-tm-red/20" :
+                  "bg-tm-card text-tm-muted border border-tm-border"
+                }`}>
+                  <span className="text-[9px] uppercase tracking-wider opacity-70">TM Sentiment</span>
+                  <span>{isBullish ? "Bullish" : isBearish ? "Bearish" : "Neutral"}</span>
+                </div>
+                {data.sentiment_summary && (
+                  <p className="text-[9px] text-tm-muted mt-0.5 max-w-[200px] leading-tight truncate">
+                    {data.sentiment_summary.slice(0, 80)}
+                  </p>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
 
