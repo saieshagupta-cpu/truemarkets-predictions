@@ -125,6 +125,21 @@ export default function MarketView() {
     return () => clearInterval(interval);
   }, []);
 
+  // Auto-refresh 1D chart every 2 minutes
+  useEffect(() => {
+    if (activePeriod !== "1") return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/chart/bitcoin?days=1&_t=${Date.now()}`, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.prices && data.prices.length > 3) setChart(data.prices);
+        }
+      } catch { /* silent */ }
+    }, 120_000);
+    return () => clearInterval(interval);
+  }, [activePeriod]);
+
   const loadChart = async (days: string) => {
     setActivePeriod(days);
     setChartLoading(true);

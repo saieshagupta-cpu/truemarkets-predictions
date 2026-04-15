@@ -308,12 +308,12 @@ async def get_chart_data(days: str = "1"):
         days = "1"
 
     tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
-    if days == "1" and tm_age < 180 and _tm_data["chart"]:
+    if days == "1" and tm_age < 180 and _tm_data["chart"] and len(_tm_data["chart"]) >= 5:
         result = {"prices": _tm_data["chart"], "days": "1", "source": "truemarkets"}
         _chart_cache["1"] = (result, time.time())
         return result
 
-    cache_ttl = 600 if days in ("1", "5") else 3600
+    cache_ttl = 120 if days == "1" else (600 if days == "5" else 3600)  # 1D chart refreshes every 2 min
     if days in _chart_cache:
         data, ts = _chart_cache[days]
         if time.time() - ts < cache_ttl:
