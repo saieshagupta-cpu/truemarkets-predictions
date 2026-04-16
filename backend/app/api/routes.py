@@ -84,29 +84,38 @@ async def _get_btc_price() -> dict:
     if cached:
         return cached
 
-    # Prefer live TrueMarkets quote so price actually refreshes
+    # Priority 1: fresh MCP tick written by _refresh_loop in main.py (updated every 30s).
+    # This is the real live price — don't fall back to the hourly candle if we have it.
+    tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
+    if tm_age < 120 and _tm_data["price"] > 0:
+        change_24h = 0.0
+        # Derive 24h change from first point of the 1d/1h chart if available
+        try:
+            from app.data.truemarkets_mcp import _fetch_price_data, _points_from_cache_or_api
+            chart_data = await _fetch_price_data("BTC", "1d", "1h")
+            points = _points_from_cache_or_api(chart_data)
+            if points:
+                first_price = float(points[0]["price"])
+                if first_price > 0:
+                    change_24h = round((_tm_data["price"] - first_price) / first_price * 100, 2)
+        except Exception:
+            pass
+        result = {"price": _tm_data["price"], "change_24h": change_24h,
+                  "volume_24h": 0, "timestamp": _tm_data["updated"], "source": "truemarkets"}
+        _set_cached("_btc_price_single", result)
+        return result
+
+    # Priority 2: fetch_current_price — last-candle fallback only when MCP tick is stale
     try:
         data = await fetch_current_price("BTC")
         if data and data.get("price", 0) > 0:
-            result = {"price": data["price"], "change_24h": data["change_24h"], "volume_24h": data.get("volume_24h", 0), "timestamp": time.time(), "source": "truemarkets"}
+            result = {"price": data["price"], "change_24h": data["change_24h"],
+                      "volume_24h": data.get("volume_24h", 0), "timestamp": time.time(),
+                      "source": "truemarkets"}
             _set_cached("_btc_price_single", result)
             return result
     except Exception:
         pass
-
-    # Fallback: pushed tm_data if reasonably fresh
-    tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
-    if tm_age < 180 and _tm_data["price"] > 0:
-        change_24h = 0
-        try:
-            from app.data.truemarkets_mcp import fetch_detailed_btc_stats
-            stats = await fetch_detailed_btc_stats()
-            change_24h = stats.get("change_24h_pct", 0)
-        except Exception:
-            pass
-        result = {"price": _tm_data["price"], "change_24h": change_24h, "volume_24h": 0, "timestamp": _tm_data["updated"], "source": "truemarkets"}
-        _set_cached("_btc_price_single", result)
-        return result
 
     stale = _get_stale("_btc_price_single")
     if stale:
