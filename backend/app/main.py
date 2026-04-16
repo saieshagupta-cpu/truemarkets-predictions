@@ -9,8 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router, _cache, _chart_cache, _tm_data
 from app.data.truemarkets_mcp import fetch_current_price, CACHE_DIR
-from app.data.tm_api_client import fetch_price_history as rest_price_history
-from app.data.tm_mcp_client import fetch_asset_summary  # sentiment stays on MCP
+from app.data.tm_mcp_client import fetch_price_history as mcp_price_history, fetch_asset_summary
 from app.config import FRONTEND_URL
 
 logger = logging.getLogger("truemarkets")
@@ -41,39 +40,38 @@ def _points_to_chart(points: list) -> list:
 
 
 async def _refresh_loop():
-    """Every 30s: pull fresh BTC price from TM REST API.
-    Fast path: 5m/5s ticks for latest price.
-    Slow path: 1d/1h history for 24h chart, written to on-disk cache.
+    """Every 30s: pull fresh BTC price from TrueMarkets MCP (no auth needed).
+    Fast path: 1h/5m ticks for latest price.
+    Slow path: 1d/1h history for 24h chart + 7d cache.
     """
     _iter = 0
-    loop = asyncio.get_event_loop()
     while True:
         try:
-            # Fast path: ~1-min-old tick from 5m/5s series
-            tick = await loop.run_in_executor(None, rest_price_history, "BTC", "5m", "5s")
-            tick_points = tick.get("points", [])
+            # Fast path: 5m ticks
+            tick = await mcp_price_history("BTC", "1h", "5m")
+            tick_points = tick.get("results", [{}])[0].get("points", [])
             if tick_points:
                 _tm_data["price"] = float(tick_points[-1]["price"])
                 _tm_data["updated"] = time.time()
 
             # Slow path: 1d/1h chart + cache (every 5th iter ~2.5 min)
             if _iter % 5 == 0:
-                ph = await loop.run_in_executor(None, rest_price_history, "BTC", "1d", "1h")
-                points = ph.get("points", [])
+                ph = await mcp_price_history("BTC", "1d", "1h")
+                points = ph.get("results", [{}])[0].get("points", [])
                 if points:
                     _write_price_cache(points, "1d", "1h")
                     _tm_data["chart"] = _points_to_chart(points)
 
-                # Also refresh 7d (fear_greed / longer-term technical signals)
+                # Also refresh 7d history for technical signals
                 try:
-                    ph7 = await loop.run_in_executor(None, rest_price_history, "BTC", "7d", "1h")
-                    pts7 = ph7.get("points", [])
+                    ph7 = await mcp_price_history("BTC", "7d", "1h")
+                    pts7 = ph7.get("results", [{}])[0].get("points", [])
                     if pts7:
                         _write_price_cache(pts7, "7d", "1h")
                 except Exception:
                     pass
         except Exception as e:
-            logger.warning(f"TM REST price refresh failed: {e}")
+            logger.warning(f"MCP price refresh failed: {e}")
         try:
             _cache.clear()
             _chart_cache.clear()

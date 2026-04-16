@@ -81,39 +81,48 @@ class TMApiClient:
             logger.warning(f"Failed to save tokens: {e}")
 
     def _refresh_access_token(self) -> bool:
+        """POST /v1/auth/token/refresh. Refresh tokens are single-use — the response
+        returns a new refresh_token which we persist back."""
         if not self._refresh_token:
             return False
-        for path in ["/v1/auth/refresh", "/v1/auth/token/refresh", "/v1/auth/email/otc/refresh"]:
-            try:
-                r = self._session.post(
-                    f"{API_HOST}{path}",
-                    json={"refresh_token": self._refresh_token},
-                    headers={"Content-Type": "application/json"},
-                    timeout=10,
-                )
-                if r.status_code == 200:
-                    tokens = r.json()
-                    self._access_token = tokens.get("access_token") or self._access_token
-                    self._refresh_token = tokens.get("refresh_token") or self._refresh_token
-                    exp = tokens.get("expires_in")
-                    if isinstance(exp, (int, float)):
-                        self._expires_at = time.time() + exp
-                    elif isinstance(exp, str):
-                        try:
-                            import datetime
-                            self._expires_at = datetime.datetime.fromisoformat(exp.replace("Z", "+00:00")).timestamp()
-                        except Exception:
-                            self._expires_at = time.time() + 3600
-                    self._save_tokens(tokens)
-                    logger.info(f"Refreshed access token via {path}")
-                    return True
-            except Exception:
-                continue
+        try:
+            r = self._session.post(
+                f"{API_HOST}/v1/auth/token/refresh",
+                json={"refresh_token": self._refresh_token},
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                tokens = r.json()
+                self._access_token = tokens.get("access_token") or self._access_token
+                self._refresh_token = tokens.get("refresh_token") or self._refresh_token
+                exp = tokens.get("expires_in")
+                if isinstance(exp, (int, float)):
+                    self._expires_at = time.time() + exp
+                elif isinstance(exp, str):
+                    try:
+                        import datetime
+                        self._expires_at = datetime.datetime.fromisoformat(exp.replace("Z", "+00:00")).timestamp()
+                    except Exception:
+                        self._expires_at = time.time() + 3600
+                else:
+                    self._expires_at = time.time() + 3600
+                self._save_tokens(tokens)
+                logger.info(f"Refreshed access token, new expiry: {self._expires_at}")
+                return True
+            else:
+                logger.error(f"Refresh failed: {r.status_code} {r.text[:200]}")
+        except Exception as e:
+            logger.error(f"Refresh exception: {e}")
         return False
 
     def _request(self, method: str, path: str, **kwargs) -> Any:
         if not self._access_token:
             raise RuntimeError("No access token — run authenticate.py")
+
+        # Proactive refresh 5 min before expiry (access token lives ~1 hour)
+        if self._expires_at and time.time() > self._expires_at - 300:
+            self._refresh_access_token()
 
         headers = kwargs.pop("headers", {}) or {}
         headers["Authorization"] = f"Bearer {self._access_token}"
