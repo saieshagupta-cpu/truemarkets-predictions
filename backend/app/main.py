@@ -10,12 +10,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router, _cache, _chart_cache, _tm_data
 from app.data.truemarkets_mcp import fetch_current_price, CACHE_DIR
 from app.data.tm_mcp_client import fetch_price_history as mcp_price_history, fetch_asset_summary
+from app.data.onchain_daily import daily_loop as onchain_daily_loop
 from app.config import FRONTEND_URL
 
 logger = logging.getLogger("truemarkets")
 
 _refresh_task = None
 _data_refresh_task = None
+_onchain_task = None
 
 BGEOMETRICS_TOKEN = "4KlmMZzF0B"
 
@@ -96,12 +98,13 @@ async def _mcp_refresh_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _refresh_task, _data_refresh_task
-    logger.info("Prediction engine started — 6 signals, auto-refresh every 30 min")
+    global _refresh_task, _data_refresh_task, _onchain_task
+    logger.info("Prediction engine started — 6 signals, price 30s, sentiment 5m, on-chain 24h")
     _refresh_task = asyncio.create_task(_refresh_loop())
     _data_refresh_task = asyncio.create_task(_mcp_refresh_loop())
+    _onchain_task = asyncio.create_task(onchain_daily_loop())
     yield
-    for task in [_refresh_task, _data_refresh_task]:
+    for task in [_refresh_task, _data_refresh_task, _onchain_task]:
         if task:
             task.cancel()
             try:
