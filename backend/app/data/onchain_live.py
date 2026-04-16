@@ -44,11 +44,19 @@ async def fetch_live_onchain() -> dict:
             else: seen[c] = 0
         df.columns = cols
 
-        # Convert strings
+        # Convert any non-numeric column to numeric (covers numpy str, pandas object, mixed).
+        # Use pd.to_numeric first; if that fails, ordinal-encode the string values.
         for col in df.columns:
-            if df[col].dtype == object and col != "date":
-                uniques = sorted(str(u) for u in df[col].unique())
-                df[col] = df[col].map({v: i for i, v in enumerate(uniques)}).fillna(0)
+            if col == "date":
+                continue
+            if pd.api.types.is_numeric_dtype(df[col]):
+                continue
+            coerced = pd.to_numeric(df[col], errors="coerce")
+            if coerced.notna().any():
+                df[col] = coerced.fillna(0.0)
+            else:
+                uniques = sorted(str(u) for u in df[col].dropna().unique())
+                df[col] = df[col].astype(str).map({v: i for i, v in enumerate(uniques)}).fillna(0)
 
         exclude = ["date", "price_open", "price_high", "price_low", "price_close", "price_volume"]
         base_cols = [c for c in df.columns if c not in exclude]
@@ -57,11 +65,17 @@ async def fetch_live_onchain() -> dict:
         latest = df.iloc[-1]
         result = {}
         for col in base_cols:
-            result[col] = float(latest[col]) if pd.notna(latest[col]) else 0.0
+            try:
+                result[col] = float(latest[col]) if pd.notna(latest[col]) else 0.0
+            except (ValueError, TypeError):
+                result[col] = 0.0
 
         # Rate-of-change features from last 14 days
         for col in base_cols:
-            vals = df[col].values.astype(float)
+            try:
+                vals = df[col].values.astype(float)
+            except (ValueError, TypeError):
+                continue
             current = vals[-1]
             for lag in [1, 3, 7, 14]:
                 if len(vals) > lag:
