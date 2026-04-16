@@ -17,7 +17,7 @@ An independent, ensemble ML prediction engine for crypto price targets. Replaces
 **Data Sources** (all free, no auth required):
 - CoinGecko API — prices, volume, market cap
 - Alternative.me — Fear & Greed Index
-- blockchain.info — on-chain metrics (hash rate, tx volume)
+- blockchain.info — on-chain BTC metrics (difficulty, tx volume)
 - Reddit — social sentiment via VADER NLP
 - Polymarket Gamma API — comparison baseline
 
