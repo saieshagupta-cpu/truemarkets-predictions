@@ -1,2 +1,6 @@
 __pycache__/
 *.pyc
+tm_tokens.json
+venv/
+*.log
+.env

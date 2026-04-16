@@ -63,8 +63,8 @@ export default function MarketView() {
           // Use TM MCP sentiment from market-stats (same source as prediction page)
           const tmSentiment = statsRes.status === "fulfilled" ? statsRes.value.tm_sentiment : null;
           setEnhanced({
-            fear_greed: m.indicators.fear_greed ?? m.indicators.rsi,
-            fear_greed_class: m.indicators.fear_greed_classification || m.sentiment_signal?.fear_greed || "Neutral",
+            fear_greed: m.sentiment_signal?.fear_greed_value ?? m.indicators.fear_greed ?? 50,
+            fear_greed_class: m.sentiment_signal?.fear_greed || m.indicators.fear_greed_classification || "Neutral",
             sentiment: tmSentiment ? (tmSentiment.charAt(0).toUpperCase() + tmSentiment.slice(1)) : (m.sentiment_signal?.overall_signal || "Neutral"),
             order_flow_pressure: m.order_flow?.pressure || "neutral",
             recommendation: m.recommended_trade?.primary_side || m.recommended_trade?.side || "hold",
@@ -122,6 +122,33 @@ export default function MarketView() {
         if (res.ok) setStats(await res.json());
       } catch { /* silent */ }
     }, 120_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fear & Greed refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const [mispRes, statsRes] = await Promise.allSettled([
+          fetch(`${API_BASE}/mispricing/bitcoin?_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
+          fetch(`${API_BASE}/market-stats/bitcoin?_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
+        ]);
+        if (mispRes.status === "fulfilled" && mispRes.value.indicators) {
+          const m = mispRes.value;
+          const tmSentiment = statsRes.status === "fulfilled" ? statsRes.value.tm_sentiment : null;
+          setEnhanced(prev => ({
+            fear_greed: m.sentiment_signal?.fear_greed_value ?? m.indicators.fear_greed ?? prev?.fear_greed ?? 50,
+            fear_greed_class: m.sentiment_signal?.fear_greed || m.indicators.fear_greed_classification || prev?.fear_greed_class || "Neutral",
+            sentiment: tmSentiment ? (tmSentiment.charAt(0).toUpperCase() + tmSentiment.slice(1)) : (m.sentiment_signal?.overall_signal || prev?.sentiment || "Neutral"),
+            order_flow_pressure: m.order_flow?.pressure || prev?.order_flow_pressure || "neutral",
+            recommendation: m.recommended_trade?.primary_side || m.recommended_trade?.side || prev?.recommendation || "hold",
+          }));
+        }
+        if (statsRes.status === "fulfilled" && statsRes.value.fear_greed) {
+          setStats(prev => prev ? { ...prev, fear_greed: statsRes.value.fear_greed } : prev);
+        }
+      } catch { /* silent */ }
+    }, 30_000);
     return () => clearInterval(interval);
   }, []);
 
@@ -250,14 +277,14 @@ export default function MarketView() {
           <div className="flex justify-between items-center mb-2">
             <span className="text-[10px] text-tm-muted uppercase tracking-wider">Fear & Greed</span>
             <span className={`text-sm font-bold ${
-              fgValue <= 25 ? "text-tm-red" : fgValue <= 45 ? "text-tm-yellow" : fgValue <= 55 ? "text-tm-muted" : fgValue <= 75 ? "text-tm-green/80" : "text-tm-green"
+              fgValue <= 25 ? "text-tm-green" : fgValue <= 45 ? "text-tm-green/80" : fgValue <= 55 ? "text-tm-muted" : fgValue <= 75 ? "text-tm-yellow" : "text-tm-red"
             }`}>
               {fgValue} &mdash; {fgClass}
             </span>
           </div>
           <div className="relative h-2.5 rounded-full overflow-visible">
             <div className="absolute inset-0 rounded-full" style={{
-              background: "linear-gradient(90deg, #ff6b6b 0%, #ffa06b 25%, #ffd93d 50%, #a8e06c 75%, #00d4aa 100%)"
+              background: "linear-gradient(90deg, #00d4aa 0%, #a8e06c 25%, #ffd93d 50%, #ffa06b 75%, #ff6b6b 100%)"
             }} />
             <div
               className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white bg-tm-bg shadow-md transition-all"

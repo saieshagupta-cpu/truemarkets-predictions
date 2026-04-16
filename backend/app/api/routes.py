@@ -84,6 +84,17 @@ async def _get_btc_price() -> dict:
     if cached:
         return cached
 
+    # Prefer live TrueMarkets quote so price actually refreshes
+    try:
+        data = await fetch_current_price("BTC")
+        if data and data.get("price", 0) > 0:
+            result = {"price": data["price"], "change_24h": data["change_24h"], "volume_24h": data.get("volume_24h", 0), "timestamp": time.time(), "source": "truemarkets"}
+            _set_cached("_btc_price_single", result)
+            return result
+    except Exception:
+        pass
+
+    # Fallback: pushed tm_data if reasonably fresh
     tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
     if tm_age < 180 and _tm_data["price"] > 0:
         change_24h = 0
@@ -97,16 +108,10 @@ async def _get_btc_price() -> dict:
         _set_cached("_btc_price_single", result)
         return result
 
-    try:
-        data = await fetch_current_price("BTC")
-        result = {"price": data["price"], "change_24h": data["change_24h"], "volume_24h": data["volume_24h"], "timestamp": time.time(), "source": "truemarkets"}
-        _set_cached("_btc_price_single", result)
-        return result
-    except Exception:
-        stale = _get_stale("_btc_price_single")
-        if stale:
-            return stale
-        return {"price": 0, "change_24h": 0, "volume_24h": 0, "timestamp": 0, "source": "none"}
+    stale = _get_stale("_btc_price_single")
+    if stale:
+        return stale
+    return {"price": 0, "change_24h": 0, "volume_24h": 0, "timestamp": 0, "source": "none"}
 
 
 @router.get("/price/bitcoin")

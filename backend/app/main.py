@@ -1,4 +1,6 @@
 import asyncio
+import json
+import os
 import time
 import logging
 import httpx
@@ -7,6 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router, _cache, _chart_cache, _tm_data
 from app.data.truemarkets_mcp import fetch_current_price, CACHE_DIR
+from app.data.tm_api_client import fetch_price_history as rest_price_history
+from app.data.tm_mcp_client import fetch_asset_summary  # sentiment stays on MCP
 from app.config import FRONTEND_URL
 
 logger = logging.getLogger("truemarkets")
@@ -17,33 +21,79 @@ _data_refresh_task = None
 BGEOMETRICS_TOKEN = "4KlmMZzF0B"
 
 
+def _write_price_cache(points: list, window: str, resolution: str):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    fname = f"btc_{window}_{resolution}.json"
+    payload = {
+        "window": window, "resolution": resolution,
+        "results": [{"symbol": "BTC", "points": points}],
+        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    with open(os.path.join(CACHE_DIR, fname), "w") as f:
+        json.dump(payload, f)
+
+
+def _points_to_chart(points: list) -> list:
+    return [
+        [int(time.mktime(time.strptime(p["t"], "%Y-%m-%dT%H:%M:%SZ"))) * 1000, float(p["price"])]
+        for p in points
+    ]
+
+
 async def _refresh_loop():
-    """Every 30s: clear endpoint caches. Only overwrite price if TM push is stale."""
+    """Every 30s: pull fresh BTC price from TM REST API.
+    Fast path: 5m/5s ticks for latest price.
+    Slow path: 1d/1h history for 24h chart, written to on-disk cache.
+    """
+    _iter = 0
+    loop = asyncio.get_event_loop()
     while True:
         try:
-            tm_age = time.time() - _tm_data["updated"] if _tm_data["updated"] > 0 else 999
-            if tm_age > 180:
-                price_data = await fetch_current_price("BTC")
-                if price_data and price_data.get("price", 0) > 0:
-                    _tm_data["price"] = price_data["price"]
-                    _tm_data["updated"] = time.time()
+            # Fast path: ~1-min-old tick from 5m/5s series
+            tick = await loop.run_in_executor(None, rest_price_history, "BTC", "5m", "5s")
+            tick_points = tick.get("points", [])
+            if tick_points:
+                _tm_data["price"] = float(tick_points[-1]["price"])
+                _tm_data["updated"] = time.time()
+
+            # Slow path: 1d/1h chart + cache (every 5th iter ~2.5 min)
+            if _iter % 5 == 0:
+                ph = await loop.run_in_executor(None, rest_price_history, "BTC", "1d", "1h")
+                points = ph.get("points", [])
+                if points:
+                    _write_price_cache(points, "1d", "1h")
+                    _tm_data["chart"] = _points_to_chart(points)
+
+                # Also refresh 7d (fear_greed / longer-term technical signals)
+                try:
+                    ph7 = await loop.run_in_executor(None, rest_price_history, "BTC", "7d", "1h")
+                    pts7 = ph7.get("points", [])
+                    if pts7:
+                        _write_price_cache(pts7, "7d", "1h")
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning(f"TM REST price refresh failed: {e}")
+        try:
             _cache.clear()
             _chart_cache.clear()
         except Exception:
             pass
+        _iter += 1
         await asyncio.sleep(30)
 
 
 async def _mcp_refresh_loop():
-    """Every 5 min: refresh TrueMarkets MCP price + sentiment via cache.
-    Claude session pushes fresh data via /tm/push — this loop uses it."""
+    """Every 5 min: refresh sentiment from TM MCP asset summary (REST has no equivalent)."""
     while True:
         try:
-            _cache.clear()
-            _chart_cache.clear()
-        except Exception:
-            pass
-        await asyncio.sleep(300)  # 5 minutes
+            summary = await fetch_asset_summary("BTC")
+            if summary:
+                _tm_data["sentiment"] = summary.get("sentiment", _tm_data.get("sentiment", "neutral"))
+                _tm_data["summary"] = summary.get("body", _tm_data.get("summary", ""))
+        except Exception as e:
+            logger.warning(f"MCP sentiment refresh failed: {e}")
+        await asyncio.sleep(300)
 
 
 @asynccontextmanager
