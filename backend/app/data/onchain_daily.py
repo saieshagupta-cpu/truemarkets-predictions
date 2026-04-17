@@ -48,7 +48,10 @@ ENDPOINTS = [
 # Premium tier: 600 req/hour → 6s between requests is the safe floor. 0.5s uses <1% of budget.
 # With 14 endpoints → ~7 seconds per full refresh.
 REQUEST_INTERVAL_SECONDS = 0.5
-RUN_INTERVAL_SECONDS = 24 * 60 * 60  # 24 hours
+# Poll every 2 hours. BGeo publishes on-chain data once per day but the exact hour varies,
+# so re-checking every 2h ensures we pick up new data within ~2h of publication.
+# _append_if_new guards against duplicate appends, so polling more often is safe.
+RUN_INTERVAL_SECONDS = 2 * 60 * 60
 
 
 async def _fetch_one(endpoint: str) -> dict | None:
@@ -178,25 +181,12 @@ async def run_daily_refresh() -> bool:
 
 
 async def daily_loop():
-    """Long-running task — call once at startup, then once every 24 hours."""
-    # On startup: only run if CSV is stale by >20 hours
-    try:
-        if os.path.exists(MERGED_CSV):
-            df = pd.read_csv(MERGED_CSV)
-            if not df.empty:
-                last_date = pd.to_datetime(str(df["date"].iloc[-1])).date()
-                today = datetime.now(timezone.utc).date()
-                days_behind = (today - last_date).days
-                if days_behind < 1:
-                    logger.info(f"onchain_merged.csv is fresh (last: {last_date}), skipping initial refresh")
-                    await asyncio.sleep(RUN_INTERVAL_SECONDS)
-    except Exception as e:
-        logger.warning(f"Startup freshness check failed: {e}")
-
+    """Long-running task — runs every RUN_INTERVAL_SECONDS (2h by default).
+    _append_if_new guards against duplicate appends, so polling more often is harmless."""
     while True:
         try:
             await run_daily_refresh()
-            # Also invalidate the in-memory onchain cache so next prediction re-reads CSV
+            # Invalidate the in-memory onchain cache so next prediction re-reads CSV
             try:
                 from app.data import onchain_live
                 onchain_live._cache = {}
@@ -204,5 +194,5 @@ async def daily_loop():
             except Exception:
                 pass
         except Exception as e:
-            logger.error(f"Daily refresh failed: {e}")
+            logger.error(f"On-chain refresh failed: {e}")
         await asyncio.sleep(RUN_INTERVAL_SECONDS)

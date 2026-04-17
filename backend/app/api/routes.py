@@ -177,14 +177,11 @@ async def get_prediction():
             macd_sig = float(historical["macd_signal"].iloc[-1]) if "macd_signal" in historical.columns else 0
             macd_hist = macd_val - macd_sig
 
-            # Bollinger position
-            if "sma_20" in historical.columns:
-                sma20 = float(historical["sma_20"].iloc[-1])
-                vol20 = float(historical["volatility_20d"].iloc[-1]) if "volatility_20d" in historical.columns else 0.02
-                bb_upper = sma20 + 2 * vol20 * sma20
-                bb_lower = sma20 - 2 * vol20 * sma20
-                bb_range = bb_upper - bb_lower
-                bollinger_pos = (current_price - bb_lower) / bb_range if bb_range > 0 else 0.5
+            # Bollinger position — use the column computed upstream by _add_technical_indicators
+            if "bollinger_position" in historical.columns:
+                bp_series = historical["bollinger_position"].dropna()
+                if len(bp_series) > 0:
+                    bollinger_pos = float(bp_series.iloc[-1])
             bollinger_pos = max(0, min(1, bollinger_pos))
 
         # ── Model prediction (on-chain data from BGeometrics) ──

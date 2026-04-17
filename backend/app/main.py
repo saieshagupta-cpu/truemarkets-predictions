@@ -83,6 +83,18 @@ async def _refresh_loop():
         await asyncio.sleep(30)
 
 
+import re
+
+_TM_PLACEHOLDER_RE = re.compile(r"\{\{\s*[a-zA-Z_]+\s*:\s*([^}]+?)\s*\}\}")
+
+
+def _strip_tm_placeholders(text: str) -> str:
+    """Replace {{token:BTC}} -> BTC, {{price:$77,000}} -> $77,000, etc."""
+    if not text:
+        return text
+    return _TM_PLACEHOLDER_RE.sub(r"\1", text)
+
+
 async def _mcp_refresh_loop():
     """Every 5 min: refresh sentiment from TM MCP asset summary (REST has no equivalent)."""
     while True:
@@ -90,7 +102,9 @@ async def _mcp_refresh_loop():
             summary = await fetch_asset_summary("BTC")
             if summary:
                 _tm_data["sentiment"] = summary.get("sentiment", _tm_data.get("sentiment", "neutral"))
-                _tm_data["summary"] = summary.get("body", _tm_data.get("summary", ""))
+                _tm_data["summary"] = _strip_tm_placeholders(
+                    summary.get("body", _tm_data.get("summary", ""))
+                )
         except Exception as e:
             logger.warning(f"MCP sentiment refresh failed: {e}")
         await asyncio.sleep(300)
