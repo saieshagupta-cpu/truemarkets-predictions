@@ -203,16 +203,6 @@ async def fetch_btc_price_history(window: str = "1d", resolution: str = "5m") ->
     return []
 
 
-async def fetch_btc_summary() -> dict:
-    """Placeholder — TM sentiment comes via MCP push, not direct API."""
-    return {}
-
-
-async def fetch_market_summary() -> dict:
-    """Placeholder — market data comes via MCP push, not direct API."""
-    return {}
-
-
 async def fetch_detailed_btc_stats() -> dict:
     """Compute detailed stats from cached price history."""
     # 24h data

@@ -15,8 +15,8 @@ import numpy as np
 WINDOW_SIZE = 1  # Tabular model, no window needed
 
 
-class CNNLSTMPredictor:
-    """Loads and runs the trained on-chain ensemble model."""
+class OnchainEnsemblePredictor:
+    """Loads and runs the trained on-chain GB + RF ensemble (Boruta feature-selected)."""
 
     def __init__(self):
         self.gb_model = None
@@ -31,8 +31,8 @@ class CNNLSTMPredictor:
         from app.config import SAVED_DIR
         gb_path = os.path.join(SAVED_DIR, "model_gb.pkl")
         rf_path = os.path.join(SAVED_DIR, "model_rf.pkl")
-        norm_path = os.path.join(SAVED_DIR, "cnn_lstm_norm.json")
-        metrics_path = os.path.join(SAVED_DIR, "cnn_lstm_metrics.json")
+        norm_path = os.path.join(SAVED_DIR, "onchain_ensemble_norm.json")
+        metrics_path = os.path.join(SAVED_DIR, "onchain_ensemble_metrics.json")
 
         if os.path.exists(norm_path):
             with open(norm_path) as f:

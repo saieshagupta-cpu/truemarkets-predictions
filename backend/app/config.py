@@ -56,7 +56,6 @@ SUPPORTED_COINS = {
 
 # ─── Model Config ─────────────────────────────────────────
 SAVED_DIR = os.path.join(os.path.dirname(__file__), "models", "saved")
-LIGHTGBM_MODEL_PATH = os.path.join(SAVED_DIR, "lightgbm_btc.pkl")
 SIGNAL_WEIGHTS_PATH = os.path.join(SAVED_DIR, "signal_weights.json")
 BACKTEST_RESULTS_PATH = os.path.join(SAVED_DIR, "backtest_results.json")
 

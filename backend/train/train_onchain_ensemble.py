@@ -9,7 +9,7 @@ Architecture: GradientBoosting + RandomForest ensemble (majority vote)
 Features: 42 base on-chain + 168 rate-of-change + 6 price-derived = 216 total
 Boruta selects best subset.
 
-Usage: python train/train_cnn_lstm.py
+Usage: python train/train_onchain_ensemble.py
 """
 
 import json, os, sys, pickle
@@ -232,7 +232,7 @@ def main():
         "n_features": N_FEAT, "selected_features": sel_names,
         "best_model": best_name,
     }
-    with open(os.path.join(SAVED_DIR, "cnn_lstm_norm.json"), "w") as f:
+    with open(os.path.join(SAVED_DIR, "onchain_ensemble_norm.json"), "w") as f:
         json.dump(norm, f, indent=2)
 
     metrics = {
@@ -265,7 +265,7 @@ def main():
         "data_source": "BGeometrics on-chain API (Premium, 27 endpoints, 5 years)",
     }
 
-    with open(os.path.join(SAVED_DIR, "cnn_lstm_metrics.json"), "w") as f:
+    with open(os.path.join(SAVED_DIR, "onchain_ensemble_metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
     with open(os.path.join(SAVED_DIR, "backtest_results.json"), "w") as f:
         json.dump(metrics, f, indent=2)

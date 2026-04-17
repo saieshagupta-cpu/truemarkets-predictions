@@ -20,7 +20,7 @@ from app.data.fear_greed import fetch_fear_greed
 from app.data.polymarket import fetch_polymarket_thresholds
 from app.data.order_flow import fetch_binance_order_flow
 from app.data import truemarkets
-from app.models.cnn_lstm import CNNLSTMPredictor
+from app.models.onchain_ensemble import OnchainEnsemblePredictor
 from app.models.signals import (
     compute_polymarket_signal, compute_order_flow_signal,
     compute_model_signal, compute_technical_signal,
@@ -60,7 +60,7 @@ def _set_cached(key: str, data):
 
 # ─── CNN-LSTM Model (loaded once) ───────────────────────
 
-_model = CNNLSTMPredictor()
+_model = OnchainEnsemblePredictor()
 
 
 # ─── Coins ──────────────────────────────────────────────
