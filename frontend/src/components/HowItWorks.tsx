@@ -22,7 +22,7 @@ export default function HowItWorks({ weights }: HowItWorksProps) {
             <SignalRow name="Order Flow" weight={weights.order_flow} color="text-tm-purple"
               desc="Real BTC buy/sell volume from Binance.US + Coinbase + order book depth." source="Binance.US + Coinbase" />
             <SignalRow name="Our Model" weight={weights.lightgbm} color="text-tm-green"
-              desc="On-chain ensemble with Boruta-selected features. Next-day BTC direction." source="BGeometrics Premium" />
+              desc="Gradient Boosting on 30 Boruta-selected on-chain features. Next-day BTC direction." source="BGeometrics Premium" />
             <SignalRow name="Technical" weight={weights.technical} color="text-tm-yellow"
               desc="RSI (14), MACD (12,26,9), Bollinger Band position." source="TrueMarkets MCP" />
             <SignalRow name="BTC Sentiment" weight={weights.sentiment} color="text-tm-accent"
