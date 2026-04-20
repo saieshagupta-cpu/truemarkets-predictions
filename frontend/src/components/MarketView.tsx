@@ -52,8 +52,8 @@ export default function MarketView() {
     async function load() {
       try {
         const [statsRes, chartRes, mispRes] = await Promise.allSettled([
-          fetch(`${API_BASE}/market-stats/bitcoin`).then(r => r.json()),
-          fetch(`${API_BASE}/chart/bitcoin?days=1`).then(r => r.json()),
+          fetch(`${API_BASE}/market-stats/bitcoin?_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
+          fetch(`${API_BASE}/chart/bitcoin?days=1&_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
           fetch(`${API_BASE}/mispricing/bitcoin?_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
         ]);
         if (statsRes.status === "fulfilled") setStats(statsRes.value);
@@ -171,7 +171,7 @@ export default function MarketView() {
     setActivePeriod(days);
     setChartLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/chart/bitcoin?days=${days}`);
+      const res = await fetch(`${API_BASE}/chart/bitcoin?days=${days}&_t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.prices?.length) setChart(data.prices);

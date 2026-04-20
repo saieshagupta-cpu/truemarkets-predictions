@@ -142,6 +142,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def no_cache_headers(request, call_next):
+    """Force browsers/CDNs to never cache /api/* responses — always serve fresh."""
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+
 app.include_router(router, prefix="/api")
 
 
