@@ -161,7 +161,7 @@ async def root():
     return {
         "name": "True Markets Prediction Engine v3",
         "model": "On-Chain Ensemble (67.4% accuracy, 30 Boruta features from BGeometrics)",
-        "signals": ["Polymarket (20%)", "Binance Order Flow (15%)", "Our Model (20%)", "Technical (20%)", "TM Sentiment (10%)", "Fear & Greed (15%)"],
+        "signals": ["Polymarket (20%)", "Binance Order Flow (15%)", "Our Model (20%)", "Technical (20%)", "BTC Sentiment (10%)", "Fear & Greed (15%)"],
         "refresh": "30s endpoints, 30min data refresh",
         "deploy": "Railway + Vercel",
     }

@@ -25,7 +25,7 @@ export default function HowItWorks({ weights }: HowItWorksProps) {
               desc="On-chain ensemble with Boruta-selected features. Next-day BTC direction." source="BGeometrics Premium" />
             <SignalRow name="Technical" weight={weights.technical} color="text-tm-yellow"
               desc="RSI (14), MACD (12,26,9), Bollinger Band position." source="TrueMarkets MCP" />
-            <SignalRow name="TM Sentiment" weight={weights.sentiment} color="text-tm-accent"
+            <SignalRow name="BTC Sentiment" weight={weights.sentiment} color="text-tm-accent"
               desc="AI sentiment from 30+ crypto news sources." source="TrueMarkets MCP" />
             <SignalRow name="Fear & Greed" weight={weights.fear_greed} color="text-tm-red"
               desc="Contrarian: extreme fear = buy, extreme greed = sell." source="alternative.me" />

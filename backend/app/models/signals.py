@@ -204,15 +204,15 @@ def compute_sentiment_signal(summary: dict) -> dict:
     if "bullish" in sentiment_text or "positive" in sentiment_text:
         direction = "bullish"
         strength = 0.62
-        reason = f"TM Sentiment: bullish — {summary_text[:80]}..." if len(summary_text) > 80 else f"TM Sentiment: bullish — {summary_text}"
+        reason = f"BTC Sentiment: bullish — {summary_text[:80]}..." if len(summary_text) > 80 else f"BTC Sentiment: bullish — {summary_text}"
     elif "bearish" in sentiment_text or "negative" in sentiment_text:
         direction = "bearish"
         strength = 0.38
-        reason = f"TM Sentiment: bearish — {summary_text[:80]}..." if len(summary_text) > 80 else f"TM Sentiment: bearish — {summary_text}"
+        reason = f"BTC Sentiment: bearish — {summary_text[:80]}..." if len(summary_text) > 80 else f"BTC Sentiment: bearish — {summary_text}"
     else:
         direction = "neutral"
         strength = 0.5
-        reason = f"TM Sentiment: neutral"
+        reason = f"BTC Sentiment: neutral"
 
     return _signal("Sentiment", direction, strength, reason,
                    WEIGHTS.get("sentiment", 0.10),

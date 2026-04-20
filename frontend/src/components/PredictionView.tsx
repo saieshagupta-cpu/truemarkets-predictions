@@ -55,7 +55,7 @@ export default function PredictionView({ data, loading }: PredictionViewProps) {
                   isBearish ? "bg-tm-red/15 text-tm-red border border-tm-red/20" :
                   "bg-tm-card text-tm-muted border border-tm-border"
                 }`}>
-                  <span className="text-[9px] uppercase tracking-wider opacity-70">TM Sentiment</span>
+                  <span className="text-[9px] uppercase tracking-wider opacity-70">BTC Sentiment</span>
                   <span>{isBullish ? "Bullish" : isBearish ? "Bearish" : "Neutral"}</span>
                 </div>
                 {data.sentiment_summary && (
